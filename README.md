@@ -105,4 +105,4 @@ Modern browser mewajibkan koneksi **HTTPS** untuk mengakses kamera di perangkat 
 ## 📄 Lisensi
 Proyek ini dilisensikan di bawah **MIT License**.
 
-© 2026 Iconnet Inventory System - Developed with ❤️ by Antigravity AI
+© 2026 Iconnet Inventory System - Developed with ❤️ by ImamN
