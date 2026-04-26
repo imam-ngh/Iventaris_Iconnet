@@ -82,6 +82,18 @@ Aplikasi ini mendukung akses dari perangkat lain dalam satu jaringan WiFi.
 2. Lihat alamat **Network IP** di terminal (contoh: `http://192.168.x.xx:3000`).
 3. Buka alamat tersebut di browser HP Anda.
 
+### 🔍 Fitur Pengecekan Kamera di HP
+Modern browser mewajibkan koneksi **HTTPS** untuk mengakses kamera di perangkat mobile. Kami telah menyediakan sistem SSL otomatis untuk memudahkan pengujian.
+
+1.  **Jalankan Generate Sertifikat**:
+    ```bash
+    node create-cert.js
+    ```
+2.  **Akses via IP Network**:
+    Buka alamat `https://192.168.x.xx:3000` (alamat IP Anda) di browser HP.
+3.  **Loloskan Peringatan SSL**:
+    Klik "Advanced/Lanjutan" -> "Proceed/Lanjutkan" pada browser HP untuk memberikan izin akses kamera.
+
 ---
 
 ## 🔐 Akun Default

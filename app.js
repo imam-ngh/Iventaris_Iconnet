@@ -1807,6 +1807,15 @@ function startCamera() {
         return;
     }
 
+    // Check if Secure Context (HTTPS)
+    const isSecure = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (!isSecure) {
+        showToast('Kamera membutuhkan HTTPS untuk berjalan di HP!', true);
+        alert('Fitur kamera di HP diblokir browser karena menggunakan HTTP biasa. \n\nSolusi: \n1. Gunakan Ngrok untuk mendapatkan link HTTPS \n2. Atau buka chrome://flags/#unsafely-treat-insecure-origin-as-secure di Chrome HP dan masukkan IP komputer Anda.');
+        return;
+    }
+
     html5QrcodeScanner = new Html5Qrcode("reader");
 
     const config = { fps: 10, qrbox: { width: 250, height: 250 } };
@@ -1818,7 +1827,7 @@ function startCamera() {
         onScanFailure
     ).catch(err => {
         console.error("Error starting camera:", err);
-        showToast('Gagal mengakses kamera!', true);
+        showToast('Gagal mengakses kamera! Pastikan izin diberikan.', true);
     });
 }
 
@@ -1912,7 +1921,7 @@ async function performScan() {
         }
     } catch (error) {
         console.error('Error in performScan:', error);
-        showToast('Gagal melakukan pengecekan!', true);
+        showToast(`Gagal: ${error.message || 'Koneksi bermasalah'}`, true);
     }
 }
 

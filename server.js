@@ -4,6 +4,8 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const db = require('./db');
+const https = require('https');
+const os = require('os');
 require('dotenv').config();
 
 const app = express();
@@ -590,26 +592,48 @@ app.get('/login.html', (req, res) => res.sendFile(path.join(__dirname, 'login.ht
 app.get('/index.html', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
 
-// Start server
-const os = require('os');
-const server = app.listen(PORT, '0.0.0.0', () => {
-    const interfaces = os.networkInterfaces();
-    let localIp = 'localhost';
+// Check for SSL certificates
+const sslPath = {
+    key: path.join(__dirname, 'key.pem'),
+    cert: path.join(__dirname, 'cert.pem')
+};
+
+if (fs.existsSync(sslPath.key) && fs.existsSync(sslPath.cert)) {
+    const options = {
+        key: fs.readFileSync(sslPath.key),
+        cert: fs.readFileSync(sslPath.cert)
+    };
     
-    for (const devName in interfaces) {
-        const iface = interfaces[devName];
-        for (let i = 0; i < iface.length; i++) {
-            const alias = iface[i];
-            if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
-                localIp = alias.address;
-                break;
+    https.createServer(options, app).listen(PORT, '0.0.0.0', () => {
+        console.log('\n=================================================');
+        console.log('🚀 Inventory System is LIVE (SECURE HTTPS)!');
+        console.log(`💻 Local:   https://localhost:${PORT}`);
+        
+        const networkInterfaces = os.networkInterfaces();
+        for (const interfaceName in networkInterfaces) {
+            for (const iface of networkInterfaces[interfaceName]) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    console.log(`📱 Network: https://${iface.address}:${PORT}`);
+                }
             }
         }
-    }
-    
-    console.log(`\n=================================================`);
-    console.log(`🚀 Inventory System is LIVE!`);
-    console.log(`💻 Local:   http://localhost:${PORT}`);
-    console.log(`📱 Network: http://${localIp}:${PORT}`);
-    console.log(`=================================================\n`);
-});
+        console.log('=================================================\n');
+    });
+} else {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log('\n=================================================');
+        console.log('🚀 Inventory System is LIVE (HTTP Mode)!');
+        console.log('💡 Tip: Jalankan "node create-cert.js" untuk HTTPS');
+        console.log(`💻 Local:   http://localhost:${PORT}`);
+        
+        const networkInterfaces = os.networkInterfaces();
+        for (const interfaceName in networkInterfaces) {
+            for (const iface of networkInterfaces[interfaceName]) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    console.log(`📱 Network: http://${iface.address}:${PORT}`);
+                }
+            }
+        }
+        console.log('=================================================\n');
+    });
+}

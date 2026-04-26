@@ -2113,6 +2113,15 @@ body::after {
     border: none !important;
     box-shadow: var(--shadow-xl) !important;
     overflow: hidden;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.scan-result-modal .modal-body {
+    max-height: 65vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .scan-result-modal-new .modal-header {
@@ -3441,6 +3450,38 @@ justify-content: center;
         right: 20px;
         left: 20px;
         padding: 14px 20px;
+    }
+
+    /* Scan Result Modal Mobile Fixes */
+    .scan-result-modal {
+        max-width: 95% !important;
+        margin: 10px auto !important;
+    }
+
+    .scan-result-modal .modal-body {
+        max-height: 60vh;
+        padding: 15px !important;
+    }
+
+    .scan-result-table td {
+        padding: 10px 8px !important;
+        font-size: 13px !important;
+    }
+
+    .scan-result-table td:first-child {
+        width: 90px !important;
+        min-width: 90px !important;
+        font-size: 10px !important;
+        padding-left: 10px !important;
+    }
+
+    .scan-result-table td:last-child {
+        padding-left: 15px !important;
+        word-break: break-word;
+    }
+
+    .scan-result-banner {
+        padding: 15px !important;
     }
 }
 
