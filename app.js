@@ -5,6 +5,7 @@ let inventoryData = [];
 let deleteItemId = null;
 let selectedItems = new Set();
 let selectedHistoryItems = new Set();
+let signaturePad, inventoryDistChart, conditionChart;
 
 // ========================================
 // INITIALIZATION
@@ -27,6 +28,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize app
     loadInventory();
     setupEventListeners();
+    
+    // Premium Upgrade: only init theme & charts at startup
+    // Signature pad is initialized lazily when navigating to the page
+    setTimeout(() => {
+        if(typeof initTheme === 'function') initTheme();
+        if(typeof initCharts === 'function') initCharts();
+    }, 300);
 });
 
 // ========================================
@@ -393,6 +401,10 @@ function navigateTo(page) {
         loadHandover();
     } else if (page === 'handover-input') {
         loadHandover();
+        // Reinit signature pad after brief delay to ensure canvas is visible
+        setTimeout(() => {
+            if(typeof initSignaturePad === 'function') initSignaturePad();
+        }, 150);
     }
 }
 
@@ -623,7 +635,11 @@ function updateDashboard() {
             </tr>
         `).join('');
     }
+    
+    // Update charts
+    if(typeof updateChartsData === 'function') updateChartsData();
 }
+
 
 // ========================================
 // COUNT-UP ANIMATION
@@ -1128,7 +1144,7 @@ function viewItem(id) {
         modalQr.appendChild(img);
     }
 
-    document.getElementById('viewModal').classList.add('show');
+    openModal('viewModal');
 }
 
 // Print Barcode Function
@@ -1213,7 +1229,7 @@ function editItem(id) {
         snConverterRow.style.display = 'none';
     }
 
-    document.getElementById('editModal').classList.add('show');
+    openModal('editModal');
 }
 
 async function saveEdit() {
@@ -1282,7 +1298,7 @@ function deleteItem(id) {
 
     deleteItemId = id;
     document.getElementById('deleteItemName').textContent = item.name;
-    document.getElementById('deleteModal').classList.add('show');
+    openModal('deleteModal');
 }
 
 async function confirmDelete() {
@@ -1295,6 +1311,10 @@ async function confirmDelete() {
             showToast('Item berhasil dihapus!');
         }
     }
+}
+
+function openModal(modalId) {
+    document.getElementById(modalId).classList.add('show');
 }
 
 function closeModal(modalId) {
@@ -1898,83 +1918,74 @@ async function performScan() {
 
 function showScanResultPopup(item, isDuplicate) {
     const modal = document.getElementById('scanResultModal');
-    const header = document.getElementById('scanResultHeader');
     const title = document.getElementById('scanResultTitle');
     const statusDiv = document.getElementById('scanResultStatus');
     const tableBody = document.getElementById('scanResultTableBody');
 
-    // ===== WARNA POPUP BERDASARKAN STATUS =====
-    // HIJAU = Belum pernah dicek (pertama kali)
-    // KUNING = Sudah pernah dicek sebelumnya
-
     if (isDuplicate) {
-        // SUDAH PERNAH DICEK - KUNING
         modal.classList.remove('scan-result-modal-new');
         modal.classList.add('scan-result-modal-duplicate');
-        title.textContent = '⚠ Barang Sudah Pernah Dicek';
-
-        statusDiv.className = 'scan-result-status-duplicate';
-        statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Barang ini sudah pernah discan sebelumnya!';
+        title.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Barang Sudah Pernah Dicek';
+        statusDiv.className = 'scan-result-banner scan-result-status-duplicate';
+        statusDiv.innerHTML = '<i class="fas fa-history"></i> Barang ini sudah pernah discan sebelumnya!';
     } else {
-        // BELUM PERNAH DICEK - HIJAU
         modal.classList.remove('scan-result-modal-duplicate');
         modal.classList.add('scan-result-modal-new');
-        title.textContent = '✓ Berhasil Dicek';
-
-        statusDiv.className = 'scan-result-status-new';
-        statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Barang berhasil dicek untuk pertama kali.';
+        title.innerHTML = '<i class="fas fa-check-circle"></i> Berhasil Dicek';
+        statusDiv.className = 'scan-result-banner scan-result-status-new';
+        statusDiv.innerHTML = '<i class="fas fa-star"></i> Barang berhasil dicek untuk pertama kali.';
     }
 
-    // Build table with item data - MODERN LAYOUT
-    const statusValue = isDuplicate
-        ? '<span class="status-value checked"><i class="fas fa-check-circle"></i> Sudah Dicek</span>'
-        : '<span class="status-value checked"><i class="fas fa-check-circle"></i> Pertama Kali</span>';
+    const statusBadge = isDuplicate
+        ? '<span class="status-badge-inline warning"><i class="fas fa-history"></i> Sudah Dicek</span>'
+        : '<span class="status-badge-inline success"><i class="fas fa-check"></i> Pertama Kali</span>';
+
+    const checkTime = isDuplicate ? (checkedItems[item.id] ? checkedItems[item.id].checkTime : null) : new Date().toISOString();
 
     tableBody.innerHTML = `
         <tr>
-            <td>ID</td>
-            <td><span class="barcode-value">${item.id || '-'}</span></td>
+            <td><i class="fas fa-tag"></i> ID Inventaris</td>
+            <td>${item.id}</td>
         </tr>
         <tr>
-            <td>Nama Barang</td>
-            <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
+            <td><i class="fas fa-cube"></i> Nama Barang</td>
+            <td><span class="badge primary">${item.name}</span></td>
         </tr>
         <tr>
-            <td>Merk</td>
-            <td>${item.merk || '-'}</td>
+            <td><i class="fas fa-industry"></i> Merk</td>
+            <td>${item.merk}</td>
         </tr>
         <tr>
-            <td>SN</td>
-            <td><span class="barcode-value">${item.sn || '-'}</span></td>
+            <td><i class="fas fa-barcode"></i> Serial Number</td>
+            <td>${item.sn}</td>
         </tr>
         <tr>
-            <td>SN Converter</td>
-            <td><span class="barcode-value">${item.snConverter || '-'}</span></td>
+            <td><i class="fas fa-exchange-alt"></i> SN Converter</td>
+            <td>${item.snConverter || '-'}</td>
         </tr>
         <tr>
-            <td>Lokasi</td>
-            <td>${item.lokasi || '-'}</td>
+            <td><i class="fas fa-map-marker-alt"></i> Lokasi</td>
+            <td>${item.lokasi}</td>
         </tr>
         <tr>
-            <td>Kondisi</td>
-            <td><span class="status-badge ${(item.kondisiBefore || '').replace(/\s+/g, '_')}">${item.kondisiBefore || '-'}</span></td>
+            <td><i class="fas fa-heartbeat"></i> Kondisi</td>
+            <td><span class="badge success">${item.kondisiAfter || item.kondisiBefore || 'Baik'}</span></td>
         </tr>
         <tr>
-            <td>Checklist</td>
-            <td>${item.checklist || '-'}</td>
+            <td><i class="fas fa-clipboard-check"></i> Checklist</td>
+            <td>${item.checklist === 'Ya' ? 'Sudah' : 'Belum'}</td>
         </tr>
         <tr>
-            <td>Status</td>
-            <td>${statusValue}</td>
+            <td><i class="fas fa-flag"></i> Status Akhir</td>
+            <td>${statusBadge}</td>
         </tr>
         <tr>
-            <td>Waktu Dicek</td>
-            <td>${formatDateTime(new Date().toISOString())}</td>
+            <td><i class="far fa-clock"></i> Waktu Dicek</td>
+            <td>${formatDateTime(checkTime)}</td>
         </tr>
     `;
 
-    // Show modal
-    modal.classList.add('show');
+    openModal('scanResultModal');
 }
 
 // SCAN PAGINATION
@@ -3236,7 +3247,7 @@ function loadHandoverItemDetails() {
         return;
     }
 
-        const item = inventoryData.find(i => i.id === itemId);
+    const item = inventoryData.find(i => i.id === itemId);
     const detailSnConverterContainer = document.getElementById('detailSnConverterContainer');
     const detailSnConverter = document.getElementById('detailSnConverter');
 
@@ -3280,7 +3291,8 @@ async function submitHandover(e) {
         kondisiAfter: document.getElementById('handoverKondisiAfter').value,
         lokasiBaru: document.getElementById('handoverLokasi').value,
         catatan: document.getElementById('handoverCatatan').value,
-        noBeritaAcara: document.getElementById('handoverNoBA').value
+        noBeritaAcara: document.getElementById('handoverNoBA').value,
+        signature: signaturePad && !signaturePad.isEmpty() ? signaturePad.toDataURL() : null
     };
 
     try {
@@ -3294,6 +3306,7 @@ async function submitHandover(e) {
         if (data.success) {
             showToast('Serah terima berhasil disimpan!');
             document.getElementById('handoverForm').reset();
+            if (signaturePad) signaturePad.clear();
             loadHandover();
         } else {
             showToast('Gagal menyimpan serah terima!', true);
@@ -3540,17 +3553,42 @@ async function deleteSelectedHandover() {
     }
 }
 
-function formatTanggalIndonesia(dateStr) {
+function formatTanggalIndonesia(dateStr, includeTime) {
     if (!dateStr) return '-';
-    const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    const parts = dateStr.split('-');
-    if (parts.length >= 3) {
-        const tahun = parts[0];
-        const bulanIdx = parseInt(parts[1]) - 1;
-        const hari = parts[2].split('T')[0];
-        return `${hari} ${bulan[bulanIdx]} ${tahun}`;
+    
+    // Check if it's an ISO string or has 'T'
+    const isIso = dateStr.includes('T');
+    const dateObj = new Date(dateStr);
+    
+    // If invalid date object and not ISO-like, try to parse
+    if (isNaN(dateObj.getTime()) && !isIso) {
+        const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        const parts = dateStr.split('-');
+        if (parts.length >= 3) {
+            const tahun = parts[0];
+            const bulanIdx = parseInt(parts[1]) - 1;
+            const hari = parts[2].split('T')[0];
+            return `${hari} ${bulan[bulanIdx]} ${tahun}`;
+        }
+        return dateStr;
     }
-    return dateStr;
+
+    // Use toLocaleString for better formatting if it's a valid date
+    const options = {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+    };
+    
+    if (includeTime) {
+        options.hour = '2-digit';
+        options.minute = '2-digit';
+        const formatted = dateObj.toLocaleString('id-ID', options).replace(/\./g, ':');
+        // If it already contains 'pukul', just fix dots. Otherwise add it.
+        return formatted.includes('pukul') ? formatted : formatted.replace(/ (\d{2}:\d{2})/, ' pukul $1');
+    }
+    
+    return dateObj.toLocaleString('id-ID', options);
 }
 
 function generateNomorBA(tanggal, id) {
@@ -3687,6 +3725,16 @@ function generateBA_pdf(id) {
     doc.text('Pihak Penyerah,', col1X, y, { align: 'center' });
     doc.text('Pihak Penerima,', col2X, y, { align: 'center' });
 
+    // 5.1 SIGNATURE IMAGE
+    if (data.signature) {
+        try {
+            // Draw signature for Penyerah only (as per user request)
+            doc.addImage(data.signature, 'PNG', col1X - 15, y + 2, 30, 15);
+        } catch (e) {
+            console.error('Error adding signature to PDF:', e);
+        }
+    }
+
     y += 25; // Space for signature
 
     // Names with Underline
@@ -3752,13 +3800,13 @@ async function generateBA_excel(id) {
         showToast('Data tidak ditemukan!', true);
         return;
     }
-    
+
     showToast('Sedang menyiapkan file Excel...');
-    
+
     try {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('BA Serah Terima');
-        
+
         const tglFormat = formatTanggalIndonesia(data.tanggal_serah_terima);
         const nomorBA = data.no_berita_acara || generateNomorBA(data.tanggal_serah_terima, data.id);
 
@@ -3867,9 +3915,9 @@ async function generateBA_excel(id) {
         worksheet.addRow([]);
         const sigHeader = worksheet.addRow(['Pihak Penyerah,', 'Pihak Penerima,']);
         sigHeader.height = 20;
-        sigHeader.eachCell(cell => { 
-            cell.font = { name: 'Arial', bold: true, size: 11 }; 
-            cell.alignment = { horizontal: 'center', vertical: 'middle' }; 
+        sigHeader.eachCell(cell => {
+            cell.font = { name: 'Arial', bold: true, size: 11 };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
 
         // Space for signature
@@ -3878,13 +3926,13 @@ async function generateBA_excel(id) {
         worksheet.addRow([]);
 
         const nameRow = worksheet.addRow([
-            data.pihak_penyerah || '( ............................ )', 
+            data.pihak_penyerah || '( ............................ )',
             data.pihak_penerima || '( ............................ )'
         ]);
         nameRow.height = 20;
-        nameRow.eachCell(cell => { 
-            cell.font = { name: 'Arial', bold: true, size: 11, underline: true }; 
-            cell.alignment = { horizontal: 'center', vertical: 'middle' }; 
+        nameRow.eachCell(cell => {
+            cell.font = { name: 'Arial', bold: true, size: 11, underline: true };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
 
         worksheet.addRow([]);
@@ -3906,7 +3954,7 @@ async function generateBA_excel(id) {
             worksheet.addRow([]);
             const noteHeader = worksheet.addRow(['Catatan:']);
             noteHeader.getCell(1).font = { name: 'Arial', bold: true, size: 10 };
-            
+
             const noteContent = worksheet.addRow([data.catatan]);
             worksheet.mergeCells(`A${noteContent.number}:B${noteContent.number}`);
             noteContent.getCell(1).font = { name: 'Arial', italic: true, size: 10, color: { argb: 'FF64748B' } };
@@ -3920,7 +3968,7 @@ async function generateBA_excel(id) {
         link.href = URL.createObjectURL(blob);
         link.download = `BA_SERAH_TERIMA_${data.item_id || 'ITEM'}_${new Date().toISOString().split('T')[0]}.xlsx`;
         link.click();
-        
+
         showToast('BA Excel profesional berhasil diunduh!');
     } catch (error) {
         console.error('Error generating Excel:', error);
@@ -3938,7 +3986,7 @@ async function exportHandoverToExcel() {
 
     try {
         showToast('Sedang menyiapkan laporan Excel...');
-        
+
         // Load data
         let data = handoverData || [];
         if (data.length === 0) {
@@ -4045,7 +4093,7 @@ async function exportHandoverToExcel() {
 
             row.height = 22;
             const isEven = index % 2 === 0;
-            
+
             row.eachCell((cell, colNumber) => {
                 // Zebra Striping
                 if (!isEven) {
@@ -4072,7 +4120,7 @@ async function exportHandoverToExcel() {
         const footerStart = worksheet.addRow([]);
         const footerRow1 = worksheet.addRow(['Dicetak oleh sistem']);
         const footerRow2 = worksheet.addRow(['ICONNET']);
-        
+
         [footerRow1, footerRow2].forEach(row => {
             worksheet.mergeCells(`A${row.number}:L${row.number}`);
             row.getCell(1).font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF94A3B8' } };
@@ -4086,7 +4134,7 @@ async function exportHandoverToExcel() {
         link.href = URL.createObjectURL(blob);
         link.download = `Laporan_Serah_Terima_${new Date().toISOString().split('T')[0]}.xlsx`;
         link.click();
-        
+
         showToast('Laporan Excel berhasil diunduh!');
     } catch (error) {
         console.error('Export Excel Error:', error);
@@ -4123,7 +4171,7 @@ function exportHandoverToPdf() {
                 h.item_name || '-',
                 h.pihak_penyerah || '-',
                 h.pihak_penerima || '-',
-                h.tanggal_serah_terima || '-',
+                h.timestamp ? formatTanggalIndonesia(h.timestamp, true) : (h.tanggal_serah_terima ? formatTanggalIndonesia(h.tanggal_serah_terima, true) : '-'),
                 h.kondisi_before || '-',
                 h.kondisi_after || '-',
                 h.lokasi_baru || '-',
@@ -4161,4 +4209,177 @@ function exportHandoverToPdf() {
     } finally {
         if (btn) btn.disabled = false;
     }
+}
+
+// ========================================
+// PROFESSIONAL UPGRADE: THEME, CHARTS, SIGNATURE
+// ========================================
+
+function initTheme() {
+    const theme = localStorage.getItem('theme') || 'dark';
+    document.body.setAttribute('data-theme', theme);
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+        themeToggle.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        themeToggle.addEventListener('click', toggleTheme);
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.body.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.body.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+        themeToggle.innerHTML = newTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    }
+    // Update charts text color if they exist
+    if (inventoryDistChart) {
+        const textColor = newTheme === 'dark' ? '#f8fafc' : '#0f172a';
+        inventoryDistChart.options.plugins.legend.labels.color = textColor;
+        inventoryDistChart.update();
+        conditionChart.options.scales.y.ticks.color = textColor;
+        conditionChart.options.scales.x.ticks.color = textColor;
+        conditionChart.update();
+    }
+}
+
+function initSignaturePad() {
+    const canvas = document.getElementById('signaturePad');
+    if (!canvas) return;
+
+    // Destroy previous instance if exists
+    if (signaturePad) {
+        try { signaturePad.off(); } catch(e) {}
+        signaturePad = null;
+    }
+
+    // Resize the canvas to match its displayed CSS size (fix HiDPI & SPA hidden element issue)
+    function resizeCanvas() {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        const w = canvas.offsetWidth;
+        const h = canvas.offsetHeight;
+        if (w === 0 || h === 0) return; // not visible yet, skip
+        canvas.width  = w * ratio;
+        canvas.height = h * ratio;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(ratio, ratio);
+        if (signaturePad) signaturePad.clear(); // clear after resize to avoid artifacts
+    }
+
+    // Remove any previous resize listener
+    if (window._signatureResizeHandler) {
+        window.removeEventListener('resize', window._signatureResizeHandler);
+    }
+    window._signatureResizeHandler = resizeCanvas;
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    signaturePad = new SignaturePad(canvas, {
+        backgroundColor: 'rgba(255,255,255,0)',
+        penColor: '#1e293b'
+    });
+
+    const clearBtn = document.getElementById('clearSignature');
+    if (clearBtn) {
+        // Clone to remove old listeners
+        const newBtn = clearBtn.cloneNode(true);
+        clearBtn.parentNode.replaceChild(newBtn, clearBtn);
+        newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            signaturePad.clear();
+        });
+    }
+}
+
+function initCharts() {
+    const distCanvas = document.getElementById('inventoryDistChart');
+    const condCanvas = document.getElementById('conditionChart');
+    if (!distCanvas || !condCanvas) return;
+
+    const distCtx = distCanvas.getContext('2d');
+    const condCtx = condCanvas.getContext('2d');
+    
+    const theme = document.body.getAttribute('data-theme');
+    const textColor = theme === 'dark' ? '#f8fafc' : '#0f172a';
+    
+    inventoryDistChart = new Chart(distCtx, {
+        type: 'doughnut',
+        data: {
+            labels: [],
+            datasets: [{
+                data: [],
+                backgroundColor: ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: textColor }
+                }
+            }
+        }
+    });
+    
+    conditionChart = new Chart(condCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Baik', 'Rusak Ringan', 'Rusak Berat'],
+            datasets: [{
+                label: 'Status Kondisi',
+                data: [0, 0, 0],
+                backgroundColor: ['#10b981', '#f59e0b', '#ef4444']
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: textColor },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                x: {
+                    ticks: { color: textColor },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
+
+function updateChartsData() {
+    if (!inventoryData || inventoryData.length === 0) return;
+    if (!inventoryDistChart || !conditionChart) initCharts();
+    if (!inventoryDistChart || !conditionChart) return;
+    
+    // Distribution
+    const dist = {};
+    inventoryData.forEach(item => {
+        const name = item.name || item.nama_barang || 'Unknown';
+        dist[name] = (dist[name] || 0) + 1;
+    });
+    
+    inventoryDistChart.data.labels = Object.keys(dist);
+    inventoryDistChart.data.datasets[0].data = Object.values(dist);
+    inventoryDistChart.update();
+    
+    // Condition
+    const cond = { 'Baik': 0, 'Rusak Ringan': 0, 'Rusak Berat': 0 };
+    inventoryData.forEach(item => {
+        const kAfter = item.kondisiAfter || item.kondisi_after;
+        const kBefore = item.kondisiBefore || item.kondisi_before;
+        if (cond[kAfter] !== undefined) cond[kAfter]++;
+        else if (cond[kBefore] !== undefined) cond[kBefore]++;
+    });
+    
+    conditionChart.data.datasets[0].data = [cond['Baik'], cond['Rusak Ringan'], cond['Rusak Berat']];
+    conditionChart.update();
 }

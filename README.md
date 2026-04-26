@@ -1,72 +1,76 @@
-# 📦 Kantor Inventory Manager
+# Kantor Inventory
 
-Sistem manajemen inventaris kantor yang modern dan responsif untuk pelacakan perangkat keras (Monitor, Keyboard, Mouse) dilengkapi dengan fitur QR Code dan ekspor data profesional.
+Sistem manajemen inventaris kantor untuk mengelola barang-barang kantor seperti monitor, keyboard, mouse, headset, dll.
 
-## 🚀 Fitur Utama
+## Fitur
 
-- **Dashboard Real-time**: Ringkasan total aset dan aktivitas terbaru.
-- **Manajemen Inventaris**: CRUD (Create, Read, Update, Delete) aset kantor.
-- **QR Code Generator**: Otomatis menghasilkan QR Code untuk setiap aset yang diinput.
-- **Ekspor Data**: Mendukung ekspor ke format **Excel (.xlsx)** dan **PDF** yang rapi dan bermerek.
-- **Desain Modern**: Antarmuka gelap (Dark Mode) yang premium dan sepenuhnya responsif (Mobile Friendly).
-- **History Tracking**: Mencatat setiap perubahan data untuk audit.
+- **Dashboard** - Melihat statistik dan aktivitas terbaru
+- **Inventory** - Mengelola data inventaris dengan fitur:
+  - Tambah, edit, hapus item
+  - Filter dan pencarian
+  - Checkbox untuk multi-select dan hapus massal
+  - Export ke Excel dan PDF
+  - Import dari Excel/CSV
+  - Generate QR Code dan Barcode
+- **Input Inventaris** - Menambah data inventaris baru
+- **Cek Inventaris** - Scan barcode/QR untuk menandai barang sudah dicek
+- **History** - Melihat riwayat aktivitas (input, update, delete)
+  - Checkbox untuk multi-select dan hapus massal
 
-## 🛠️ Tech Stack
+## Teknologi
 
+- **Frontend**: HTML, CSS, JavaScript
 - **Backend**: Node.js, Express.js
 - **Database**: PostgreSQL
-- **Frontend**: HTML5, CSS3 (Vanilla), JavaScript (ES6+)
-- **Libraries**: 
-  - [JsBarcode](https://lindell.me/JsBarcode/) & [QRCode.js](https://davidshimjs.github.io/qrcodejs/)
-  - [SheetJS](https://sheetjs.com/) (Excel Export)
-  - [jsPDF](https://github.com/parallax/jsPDF) & [AutoTable](https://github.com/simonbengtsson/jsPDF-autotable) (PDF Export)
+- **Library**:
+  - ExcelJS (export Excel)
+  - jsPDF (export PDF)
+  - QRCode.js (generate QR)
+  - SheetJS (import Excel)
 
-## 📋 Prasyarat
+## Cara Menjalankan
 
-- [Node.js](https://nodejs.org/) (Versi terbaru disarankan)
-- [PostgreSQL](https://www.postgresql.org/)
-- Akun GitHub
+1. Install dependencies:
+```bash
+npm install
+```
 
-## ⚙️ Cara Instalasi
+2. Konfigurasi database di `.env`:
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=iventaris_db
+DB_USER=postgres
+DB_PASSWORD=your_password
+```
 
-1. **Clone Repository**
-   ```bash
-   git clone https://github.com/imam-ngh/Iventaris_Iconnet.git
-   cd Iventaris_Iconnet
-   ```
+3. Jalankan server:
+```bash
+node server.js
+```
 
-2. **Instal Dependensi**
-   ```bash
-   npm install
-   ```
+4. Buka browser: http://localhost:3000
 
-3. **Konfigurasi Database**
-   - Buat database baru di PostgreSQL bernama `iventaris_db`.
-   - Impor skema dari file `iventaris_db.sql`.
-   - Sesuaikan file `.env` dengan kredensial PostgreSQL Anda:
-     ```env
-     DB_USER=postgres
-     DB_HOST=localhost
-     DB_DATABASE=iventaris_db
-     DB_PASSWORD=admin
-     DB_PORT=5432
-     ```
+## Default Login
 
-4. **Jalankan Aplikasi**
-   ```bash
-   npm start
-   ```
-   Aplikasi akan berjalan di [http://localhost:3000](http://localhost:3000).
+- Username: admin
+- Password: admin
 
-## 📂 Struktur Folder
+## Struktur Folder
 
-- `css/` - File styling CSS.
-- `img/` - Aset gambar dan logo.
-- `docs/` - Dokumentasi teknis dan spesifikasi.
-- `tools/` - Skrip pembantu/utility.
-- `app.js` - Logika frontend utama.
-- `server.js` - Entry point server Express.
-- `db.js` - Konfigurasi koneksi database.
+```
+iventaris1-main/
+├── app.js           # Frontend logic
+├── server.js        # Backend server
+├── index.html       # Main page
+├── login.html       # Login page
+├── css/
+│   └── style.css    # Styling
+├── img/             # Images
+├── barcode/        # Generated QR codes
+└── package.json    # Dependencies
+```
 
----
-Dikembangkan dengan ❤️ oleh **Imam**
+## Lisensi
+
+MIT
