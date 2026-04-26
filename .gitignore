@@ -1,0 +1,13 @@
+node_modules/
+.env
+*.log
+.DS_Store
+# Junk files
+nul
+_nul
+# IDEs and Tools
+.claude/
+.kilo/
+.vscode/
+# Temporary folders
+scratch/

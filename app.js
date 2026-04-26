@@ -3,11 +3,13 @@
 // ========================================
 let inventoryData = [];
 let deleteItemId = null;
+let selectedItems = new Set();
+let selectedHistoryItems = new Set();
 
 // ========================================
 // INITIALIZATION
 // ========================================
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Check if user is logged in
     const isLoggedIn = sessionStorage.getItem('isLoggedIn');
     if (!isLoggedIn) {
@@ -28,6 +30,89 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ========================================
+// CHECKBOX EVENT LISTENERS - Re-attach after table render
+// ========================================
+function attachCheckboxListeners() {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach((checkbox, idx) => {
+        // Get ID from the parent row's data-id attribute
+        const row = checkbox.closest('tr');
+        const id = row ? row.getAttribute('data-id') : idx;
+
+        // Restore checked state from selectedItems
+        if (id && selectedItems.has(id)) {
+            checkbox.checked = true;
+        } else if (id) {
+            checkbox.checked = false;
+        }
+
+        // Remove old onchange handler and add new one
+        checkbox.onchange = function () {
+            const rowId = this.closest('tr').getAttribute('data-id');
+            if (this.checked) {
+                selectedItems.add(rowId);
+            } else {
+                selectedItems.delete(rowId);
+            }
+            updateSelectedCount();
+            updateActionButtons();
+        };
+    });
+}
+
+// ========================================
+// HELPER FUNCTIONS FOR BADGE CLASSES
+// ========================================
+function getStatusBadgeClass(status) {
+    if (!status) return 'none';
+    const s = status.toString().toLowerCase().trim();
+    if (s === 'baik' || s === 'yes' || s === 'ya') return 'Baik';
+    if (s === 'rusak ringan' || s === 'warning') return 'Rusak_Ringan';
+    if (s === 'rusak berat' || s === 'danger') return 'Rusak_Berat';
+    return s.replace(/\s+/g, '_');
+}
+
+function getCategoryBadgeClass(category) {
+    if (!category) return 'none';
+    return category.toString().toLowerCase().trim();
+}
+
+// ========================================
+// ACTION BUTTON EVENT LISTENERS (Event Delegation)
+// ========================================
+function attachActionButtonListeners() {
+    // Use event delegation on the table body for better reliability
+    const tableBody = document.getElementById('inventoryTableBody');
+    if (!tableBody) return;
+
+    // Remove old delegation if exists
+    tableBody.onclick = null;
+
+    // Add new delegation
+    tableBody.onclick = function (e) {
+        const btn = e.target.closest('.action-btn');
+        if (!btn) return;
+
+        const row = btn.closest('tr');
+        const id = row ? row.getAttribute('data-id') : null;
+        if (!id) return;
+
+        // Prevent default and stop propagation
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Call appropriate function based on button class
+        if (btn.classList.contains('view')) {
+            viewItem(id);
+        } else if (btn.classList.contains('edit')) {
+            editItem(id);
+        } else if (btn.classList.contains('delete')) {
+            deleteItem(id);
+        }
+    };
+}
+
+// ========================================
 // EVENT LISTENERS
 // ========================================
 function setupEventListeners() {
@@ -37,10 +122,34 @@ function setupEventListeners() {
     // Menu navigation
     const menuItems = document.querySelectorAll('.menu-item');
     menuItems.forEach(item => {
-        item.addEventListener('click', function() {
+        item.addEventListener('click', function (e) {
+            // Check if this is a submenu item
+            if (this.classList.contains('submenu-item')) {
+                const page = this.getAttribute('data-page');
+                navigateTo(page);
+
+                // Close sidebar on mobile
+                if (window.innerWidth < 1024) {
+                    document.getElementById('sidebar').classList.remove('active');
+                    document.getElementById('sidebarOverlay').classList.remove('show');
+                }
+                return;
+            }
+
+            // Check if this item has submenu
+            if (this.classList.contains('has-submenu')) {
+                this.classList.toggle('open');
+                const nextSibling = this.nextElementSibling;
+                if (nextSibling && nextSibling.classList.contains('submenu')) {
+                    nextSibling.classList.toggle('open');
+                }
+                return;
+            }
+
+            // Normal menu item - navigate
             const page = this.getAttribute('data-page');
             navigateTo(page);
-            
+
             // Close sidebar on mobile
             if (window.innerWidth < 1024) {
                 document.getElementById('sidebar').classList.remove('active');
@@ -50,21 +159,36 @@ function setupEventListeners() {
     });
 
     // Mobile sidebar toggle
-    document.getElementById('hamburger').addEventListener('click', function() {
+    document.getElementById('hamburger').addEventListener('click', function () {
         document.getElementById('sidebar').classList.toggle('active');
         document.getElementById('sidebarOverlay').classList.toggle('show');
     });
 
-    document.getElementById('sidebarOverlay').addEventListener('click', function() {
+    document.getElementById('sidebarOverlay').addEventListener('click', function () {
         document.getElementById('sidebar').classList.remove('active');
         this.classList.remove('show');
     });
 
-    // Search
-    document.getElementById('searchInput').addEventListener('input', updateInventoryTable);
-    
-    // Filter dropdown
-    document.getElementById('exportFilter').addEventListener('change', updateInventoryTable);
+    // Search - don't clear selected items, just re-render with checkbox listeners
+    document.getElementById('searchInput').addEventListener('input', function () {
+        selectedItems.clear();
+        updateSelectedCount();
+        updateInventoryTable();
+    });
+
+    // Filter dropdown - don't clear selected items, just re-render with checkbox listeners
+    document.getElementById('exportFilter').addEventListener('change', function () {
+        selectedItems.clear();
+        updateSelectedCount();
+        updateInventoryTable();
+    });
+
+    // View limit dropdown - don't clear selected items
+    document.getElementById('viewLimit').addEventListener('change', function () {
+        selectedItems.clear();
+        updateSelectedCount();
+        updateInventoryTable();
+    });
 
     // Export buttons
     document.getElementById('exportExcel').addEventListener('click', exportToExcel);
@@ -74,32 +198,64 @@ function setupEventListeners() {
     const importExcelBtn = document.getElementById('importExcelBtn');
     const importFileInput = document.getElementById('importFileInput');
     if (importExcelBtn && importFileInput) {
-        importExcelBtn.addEventListener('click', function() {
+        importExcelBtn.addEventListener('click', function () {
             importFileInput.click();
         });
         importFileInput.addEventListener('change', handleImportFile);
     }
 
+    // Delete selected button
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', deleteSelectedItems);
+    }
+
+    // Generate QR button
+    const generateQrBtn = document.getElementById('generateQrBtn');
+    if (generateQrBtn) {
+        generateQrBtn.addEventListener('click', function () {
+            generateQRForSelected();
+        });
+    }
+
     // History page event listeners
     const historySearchInput = document.getElementById('historySearchInput');
     if (historySearchInput) {
-        historySearchInput.addEventListener('input', renderHistoryTable);
+        historySearchInput.addEventListener('input', function () {
+            selectedHistoryItems.clear();
+            updateHistorySelectedCount();
+            renderHistoryTable();
+        });
     }
     const historyActionFilter = document.getElementById('historyActionFilter');
     if (historyActionFilter) {
-        historyActionFilter.addEventListener('change', renderHistoryTable);
+        historyActionFilter.addEventListener('change', function () {
+            selectedHistoryItems.clear();
+            updateHistorySelectedCount();
+            renderHistoryTable();
+        });
     }
     const historyItemFilter = document.getElementById('historyItemFilter');
     if (historyItemFilter) {
-        historyItemFilter.addEventListener('change', renderHistoryTable);
+        historyItemFilter.addEventListener('change', function () {
+            selectedHistoryItems.clear();
+            updateHistorySelectedCount();
+            renderHistoryTable();
+        });
     }
-    const exportHistoryExcelBtn = document.getElementById('exportHistoryExcel');
+    const exportHistoryExcelBtn = document.getElementById('exportHistoryExcelBtn');
     if (exportHistoryExcelBtn) {
         exportHistoryExcelBtn.addEventListener('click', exportHistoryToExcel);
     }
-    const exportHistoryPdfBtn = document.getElementById('exportHistoryPdf');
+    const exportHistoryPdfBtn = document.getElementById('exportHistoryPdfBtn');
     if (exportHistoryPdfBtn) {
         exportHistoryPdfBtn.addEventListener('click', exportHistoryToPdf);
+    }
+
+    // Delete selected history button
+    const deleteHistorySelectedBtn = document.getElementById('deleteHistorySelectedBtn');
+    if (deleteHistorySelectedBtn) {
+        deleteHistorySelectedBtn.addEventListener('click', deleteSelectedHistory);
     }
 
     // Initialize sortable columns
@@ -108,15 +264,50 @@ function setupEventListeners() {
     // Inventory form
     document.getElementById('inventoryForm').addEventListener('submit', handleInventorySubmit);
 
+    // Handover form
+    document.getElementById('handoverForm').addEventListener('submit', submitHandover);
+
     // Print QR button
     document.getElementById('printQrBtn').addEventListener('click', printQRCode);
 
     // Set today's date
     document.getElementById('itemDate').valueAsDate = new Date();
+    document.getElementById('handoverTanggal').valueAsDate = new Date();
+
+    // Handover search and filter listeners
+    const handoverSearchInput = document.getElementById('handoverSearchInput');
+    if (handoverSearchInput) {
+        handoverSearchInput.addEventListener('input', updateHandoverTable);
+    }
+    const handoverJenisFilter = document.getElementById('handoverJenisFilter');
+    if (handoverJenisFilter) {
+        handoverJenisFilter.addEventListener('change', updateHandoverTable);
+    }
+
+    // Handover export buttons
+    const exportHandoverExcel = document.getElementById('exportHandoverExcel');
+    if (exportHandoverExcel) {
+        exportHandoverExcel.addEventListener('click', exportHandoverToExcel);
+    }
+    const exportHandoverPdf = document.getElementById('exportHandoverPdf');
+    if (exportHandoverPdf) {
+        exportHandoverPdf.addEventListener('click', exportHandoverToPdf);
+    }
+
+    // Show/hide SN Converter based on item name
+    document.getElementById('itemName').addEventListener('change', function () {
+        const snConverterRow = document.getElementById('snConverterRow');
+        if (this.value === 'Headset') {
+            snConverterRow.style.display = 'flex';
+        } else {
+            snConverterRow.style.display = 'none';
+            document.getElementById('itemSnConverter').value = '';
+        }
+    });
 
     // Close modal when clicking outside
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
-        overlay.addEventListener('click', function(e) {
+        overlay.addEventListener('click', function (e) {
             if (e.target === this) {
                 this.classList.remove('show');
             }
@@ -145,11 +336,36 @@ function navigateTo(page) {
         }
     });
 
-    // Update page
+    // Open submenu if navigating to a submenu item
+    const targetSubmenuItem = document.querySelector(`.submenu-item[data-page="${page}"]`);
+    if (targetSubmenuItem) {
+        const parentHasSubmenu = targetSubmenuItem.previousElementSibling;
+        if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
+            parentHasSubmenu.classList.add('open');
+            const submenuContainer = parentHasSubmenu.nextElementSibling;
+            if (submenuContainer && submenuContainer.classList.contains('submenu')) {
+                submenuContainer.classList.add('open');
+            }
+        }
+    }
+
+    // Update page with animation
     document.querySelectorAll('.page').forEach(p => {
         p.classList.remove('active');
     });
-    document.getElementById(page + 'Page').classList.add('active');
+    const targetPage = document.getElementById(page + 'Page');
+    targetPage.classList.add('active');
+
+    // Add stagger animation to cards on dashboard
+    if (page === 'dashboard') {
+        const cards = targetPage.querySelectorAll('.stat-card');
+        cards.forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+            card.style.opacity = '0';
+            card.style.animation = 'fadeSlideIn 0.5s ease forwards';
+            card.style.animationDelay = `${index * 0.1}s`;
+        });
+    }
 
     // Update title
     const pageTitles = {
@@ -157,7 +373,10 @@ function navigateTo(page) {
         'inventory': 'Inventory',
         'input': 'Input Inventaris',
         'scan': 'Cek Inventaris',
-        'history': 'History'
+        'history': 'History',
+        'handover': 'Serah Terima',
+        'handover-data': 'Data Serah Terima',
+        'handover-input': 'Input Serah Terima'
     };
     document.getElementById('pageTitle').textContent = pageTitles[page];
 
@@ -170,6 +389,10 @@ function navigateTo(page) {
         initScanPage();
     } else if (page === 'history') {
         loadHistory();
+    } else if (page === 'handover' || page === 'handover-data') {
+        loadHandover();
+    } else if (page === 'handover-input') {
+        loadHandover();
     }
 }
 
@@ -181,7 +404,7 @@ async function loadInventory() {
         const response = await fetch('/api/inventory');
         inventoryData = await response.json();
         updateDashboard();
-        updateInventoryTable();
+        initializePagination();
     } catch (error) {
         console.error('Error loading inventory:', error);
         showToast('Gagal memuat data inventaris!', true);
@@ -197,7 +420,7 @@ async function addInventory(item) {
             },
             body: JSON.stringify(item)
         });
-        
+
         const data = await response.json();
         if (data.success) {
             inventoryData.push(data.item);
@@ -221,7 +444,7 @@ async function updateInventoryItem(id, updatedItem) {
             },
             body: JSON.stringify(updatedItem)
         });
-        
+
         const data = await response.json();
         if (data.success) {
             const index = inventoryData.findIndex(item => item.id === id);
@@ -244,7 +467,7 @@ async function deleteInventoryItem(id) {
         const response = await fetch(`/api/inventory/${id}`, {
             method: 'DELETE'
         });
-        
+
         const data = await response.json();
         if (data.success) {
             inventoryData = inventoryData.filter(item => item.id !== id);
@@ -259,6 +482,101 @@ async function deleteInventoryItem(id) {
     return false;
 }
 
+function toggleItemSelection(id) {
+    if (selectedItems.has(id)) {
+        selectedItems.delete(id);
+    } else {
+        selectedItems.add(id);
+    }
+    updateSelectedCount();
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+
+    if (selectAllCheckbox.checked) {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filterSelect = document.getElementById('exportFilter');
+        const filterValue = filterSelect ? filterSelect.value : 'all';
+
+        const filtered = inventoryData.filter(item => {
+            if (filterValue !== 'all' && item.name !== filterValue) {
+                return false;
+            }
+            const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
+                (item.merk && item.merk.toLowerCase().includes(search)) ||
+                (item.sn && item.sn.toLowerCase().includes(search)) ||
+                (item.lokasi && item.lokasi.toLowerCase().includes(search));
+            return matchesSearch;
+        });
+
+        filtered.forEach(item => selectedItems.add(item.id));
+    } else {
+        selectedItems.clear();
+    }
+
+    checkboxes.forEach(cb => {
+        cb.checked = selectAllCheckbox.checked;
+    });
+
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const countEl = document.getElementById('selectedCount');
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    const generateQrBtn = document.getElementById('generateQrBtn');
+    const count = selectedItems.size;
+
+    if (countEl) countEl.textContent = count;
+
+    if (deleteBtn) {
+        deleteBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+    if (generateQrBtn) {
+        generateQrBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+}
+
+function updateActionButtons() {
+    // Same as updateSelectedCount - duplicate for compatibility
+    updateSelectedCount();
+}
+
+async function deleteSelectedItems() {
+    if (selectedItems.size === 0) {
+        showToast('Pilih item yang ingin dihapus!', true);
+        return;
+    }
+
+    const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedItems.size} item?`);
+    if (!confirmDelete) return;
+
+    try {
+        const response = await fetch('/api/inventory/bulk-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ids: Array.from(selectedItems) })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            inventoryData = inventoryData.filter(item => !selectedItems.has(item.id));
+            selectedItems.clear();
+            updateSelectedCount();
+            updateDashboard();
+            updateInventoryTable();
+            showToast(`${data.count} item berhasil dihapus!`);
+        }
+    } catch (error) {
+        console.error('Error deleting selected items:', error);
+        showToast('Gagal menghapus item!', true);
+    }
+}
+
 // ========================================
 // DASHBOARD
 // ========================================
@@ -269,29 +587,36 @@ function updateDashboard() {
     const keyboards = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'keyboard').length;
     const mice = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'mouse').length;
     const headsets = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'headset').length;
+    const laptops = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'laptop').length;
+    const pcs = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'pc').length;
+    const tvs = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'tv').length;
 
-    document.getElementById('totalItems').textContent = total;
-    document.getElementById('totalMonitors').textContent = monitors;
-    document.getElementById('totalKeyboards').textContent = keyboards;
-    document.getElementById('totalMice').textContent = mice;
-    document.getElementById('totalHeadsets').textContent = headsets;
+    // Animate count-up for stats
+    animateCountUp('totalItems', total);
+    animateCountUp('totalMonitors', monitors);
+    animateCountUp('totalKeyboards', keyboards);
+    animateCountUp('totalMice', mice);
+    animateCountUp('totalHeadsets', headsets);
+    animateCountUp('totalLaptops', laptops);
+    animateCountUp('totalPCs', pcs);
+    animateCountUp('totalTVs', tvs);
 
     // Update recent activity
     const recentTableBody = document.getElementById('recentTableBody');
     const recentItems = inventoryData.slice(-5).reverse();
-    
+
     if (recentItems.length === 0) {
         recentTableBody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-secondary);">Belum ada aktivitas</td></tr>';
     } else {
         recentTableBody.innerHTML = recentItems.map((item, index) => `
-            <tr>
-                <td>${item.name || '-'}</td>
+            <tr style="animation: fadeSlideIn 0.5s ease forwards; animation-delay: ${index * 0.1}s; opacity: 0;">
+                <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
                 <td>${item.merk || '-'}</td>
-                <td>${item.sn || '-'}</td>
+                <td><span class="barcode-display">${item.sn || '-'}</span></td>
                 <td>${item.lokasi || '-'}</td>
-                <td>${item.kondisiBefore || '-'}</td>
-                <td>${item.checklist || '-'}</td>
-                <td>${item.kondisiAfter || '-'}</td>
+                <td><span class="status-badge ${(item.kondisiBefore || '').replace(/\s+/g, '_')}">${item.kondisiBefore || '-'}</span></td>
+                <td><span class="status-badge ${(item.kondisiAfter || '').replace(/\s+/g, '_')}">${item.kondisiAfter || '-'}</span></td>
+                <td><span class="status-badge ${(item.checklist || '')}">${item.checklist || '-'}</span></td>
                 <td>${item.catatan || '-'}</td>
                 <td>${item.date || '-'}</td>
                 <td><span class="barcode-display">${item.id || '-'}</span></td>
@@ -301,65 +626,208 @@ function updateDashboard() {
 }
 
 // ========================================
+// COUNT-UP ANIMATION
+// ========================================
+function animateCountUp(elementId, targetValue, duration = 1500) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const startValue = 0;
+    const startTime = performance.now();
+
+    function updateValue(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+
+        const currentValue = Math.floor(startValue + (targetValue - startValue) * easeOut);
+        element.textContent = currentValue;
+
+        if (progress < 1) {
+            requestAnimationFrame(updateValue);
+        } else {
+            element.textContent = targetValue;
+        }
+    }
+
+    requestAnimationFrame(updateValue);
+}
+
+// ========================================
 // INVENTORY TABLE
 // ========================================
-function updateInventoryTable() {
+let currentPage = 1;
+let itemsPerPage = 10;
+
+function changeViewLimit() {
+    const select = document.getElementById('viewLimit');
+    if (select) {
+        itemsPerPage = parseInt(select.value);
+    }
+    currentPage = 1;
+    updateInventoryTable();
+}
+
+function initializePagination() {
+    const select = document.getElementById('viewLimit');
+    if (select) {
+        itemsPerPage = parseInt(select.value);
+    }
+    currentPage = 1;
+    console.log('Initializing pagination - Items per page:', itemsPerPage, 'Total data:', inventoryData.length);
+    updateInventoryTable();
+}
+
+function changePage(direction) {
     const search = document.getElementById('searchInput').value.toLowerCase();
     const filterSelect = document.getElementById('exportFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
     let filtered = inventoryData.filter(item => {
-        // Apply name filter
-        if (filterValue !== 'all' && item.name !== filterValue) {
-            return false;
-        }
-        
-        const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) || 
-                            (item.merk && item.merk.toLowerCase().includes(search)) ||
-                            (item.sn && item.sn.toLowerCase().includes(search)) ||
-                            (item.lokasi && item.lokasi.toLowerCase().includes(search));
+        if (filterValue !== 'all' && item.name !== filterValue) return false;
+        const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
+            (item.merk && item.merk.toLowerCase().includes(search)) ||
+            (item.sn && item.sn.toLowerCase().includes(search)) ||
+            (item.lokasi && item.lokasi.toLowerCase().includes(search));
         return matchesSearch;
     });
 
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    currentPage += direction;
+
+    if (currentPage < 1) currentPage = 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    updateInventoryTable();
+}
+
+function goToPage(page) {
+    currentPage = page;
+    updateInventoryTable();
+}
+
+function updateInventoryTable() {
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    const filterSelect = document.getElementById('exportFilter');
+    const filterValue = filterSelect ? filterSelect.value : 'all';
+
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+
+    let filtered = inventoryData.filter(item => {
+        if (filterValue !== 'all' && item.name !== filterValue) return false;
+        const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
+            (item.merk && item.merk.toLowerCase().includes(search)) ||
+            (item.sn && item.sn.toLowerCase().includes(search)) ||
+            (item.lokasi && item.lokasi.toLowerCase().includes(search));
+        return matchesSearch;
+    });
+
+    const totalItems = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    // Ensure itemsPerPage is valid
+    if (!itemsPerPage || itemsPerPage < 1) itemsPerPage = 10;
+
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+
+    // Debug log
+    console.log('Pagination - Page:', currentPage, 'ItemsPerPage:', itemsPerPage, 'Start:', startIndex, 'End:', endIndex, 'Total:', totalItems);
+
+    // Force slice to work correctly
+    const paginatedData = filtered.slice(startIndex, endIndex);
+    console.log('Paginated data count:', paginatedData.length);
+
     const tableBody = document.getElementById('inventoryTableBody');
     const emptyState = document.getElementById('emptyState');
+    const pagination = document.getElementById('inventoryPagination');
+    const showingStart = document.getElementById('showingStart');
+    const showingEnd = document.getElementById('showingEnd');
+    const totalData = document.getElementById('totalData');
+    const prevBtn = document.getElementById('prevPageBtn');
+    const nextBtn = document.getElementById('nextPageBtn');
+    const pageNumbers = document.getElementById('pageNumbers');
 
-    if (filtered.length === 0) {
+    if (totalItems === 0) {
         tableBody.innerHTML = '';
         emptyState.style.display = 'block';
+        if (pagination) pagination.style.display = 'none';
     } else {
         emptyState.style.display = 'none';
-        tableBody.innerHTML = filtered.map((item, index) => `
-            <tr>
-                <td>${item.name || '-'}</td>
+        if (pagination) pagination.style.display = 'flex';
+
+        tableBody.innerHTML = paginatedData.map((item, index) => {
+            const isSelected = selectedItems.has(item.id);
+            // Status badge classes - ensure proper styling
+            const kondisiBeforeClass = getStatusBadgeClass(item.kondisiBefore);
+            const kondisiAfterClass = getStatusBadgeClass(item.kondisiAfter);
+            const checklistClass = item.checklist === 'Ya' ? 'checked' : 'unchecked';
+            const categoryClass = getCategoryBadgeClass(item.name);
+
+            return `
+            <tr data-id="${item.id}" class="${isSelected ? 'selected-row' : ''}">
+                <td><input type="checkbox" class="row-checkbox" ${isSelected ? 'checked' : ''}></td>
+                <td><span class="category-badge ${categoryClass}">${item.name || '-'}</span></td>
                 <td>${item.merk || '-'}</td>
-                <td>${item.sn || '-'}</td>
+                <td><span class="barcode-value">${item.sn || '-'}</span></td>
+                <td><span class="barcode-value">${item.snConverter || '-'}</span></td>
                 <td>${item.lokasi || '-'}</td>
-                <td>${item.kondisiBefore || '-'}</td>
-                <td>${item.checklist || '-'}</td>
-                <td>${item.kondisiAfter || '-'}</td>
+                <td><span class="status-badge ${kondisiBeforeClass}">${item.kondisiBefore || '-'}</span></td>
+                <td><span class="status-badge ${kondisiAfterClass}">${item.kondisiAfter || '-'}</span></td>
+                <td><span class="status-badge ${checklistClass}">${item.checklist || '-'}</span></td>
                 <td>${item.catatan || '-'}</td>
                 <td>${item.tanggalMasuk || '-'}</td>
                 <td>${item.date || '-'}</td>
                 <td>
-                    <img src="${item.qrCode || ''}" alt="QR" class="qr-thumbnail" onclick="viewItem('${item.id}')" style="display: ${item.qrCode ? 'block' : 'none'}">
+                    ${item.qrCode
+                    ? `<img src="${item.qrCode}" alt="QR" class="qr-thumbnail">`
+                    : `<span class="no-data">-</span>`
+                }
                 </td>
-                <td><span class="barcode-display">${item.id || '-'}</span></td>
+                <td><span class="barcode-value">${item.barcode || item.id || '-'}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn view" onclick="viewItem('${item.id}')" title="Lihat">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="action-btn edit" onclick="editItem('${item.id}')" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="action-btn delete" onclick="deleteItem('${item.id}')" title="Hapus">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <button class="action-btn view" onclick="viewItem('${item.id}')" title="Lihat"><i class="fas fa-eye"></i></button>
+                        <button class="action-btn edit" onclick="editItem('${item.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="action-btn delete" onclick="deleteItem('${item.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
             </tr>
-        `).join('');
+            `;
+        }).join('');
+
+        // Attach checkbox event listeners AFTER rendering
+        attachCheckboxListeners();
+
+        // Attach action button event listeners
+        attachActionButtonListeners();
+
+        if (showingStart) showingStart.textContent = totalItems > 0 ? startIndex + 1 : 0;
+        if (showingEnd) showingEnd.textContent = endIndex;
+        if (totalData) totalData.textContent = totalItems;
+
+        if (prevBtn) prevBtn.disabled = currentPage === 1;
+        if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+
+        if (pageNumbers) {
+            let html = '';
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                    html += `<button class="page-number ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+                } else if (i === currentPage - 2 || i === currentPage + 2) {
+                    html += `<span class="ellipsis">...</span>`;
+                }
+            }
+            pageNumbers.innerHTML = html;
+        }
+
+        // Re-attach checkbox listeners after table render
+        attachCheckboxListeners();
     }
 }
 
@@ -373,6 +841,7 @@ async function handleInventorySubmit(e) {
         name: document.getElementById('itemName').value,
         merk: document.getElementById('itemMerk').value,
         sn: document.getElementById('itemSn').value,
+        snConverter: document.getElementById('itemSnConverter').value,
         lokasi: document.getElementById('itemLocation').value,
         kondisiBefore: document.getElementById('itemKondisiBefore').value,
         checklist: document.getElementById('itemChecklist').value,
@@ -441,54 +910,191 @@ async function handleInventorySubmit(e) {
 }
 
 function printQRCode() {
-    const qrcodeDiv = document.getElementById('qrcode');
-    const qrImage = qrcodeDiv.querySelector('canvas') || qrcodeDiv.querySelector('img');
-    
-    if (qrImage) {
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(`
-            <html>
-                <head>
-                    <title>Print QR Code</title>
-                    <style>
-                        body { 
-                            display: flex; 
-                            justify-content: center; 
-                            align-items: center; 
-                            height: 100vh; 
-                            margin: 0;
-                            font-family: Arial, sans-serif;
-                        }
-                        .qr-container { 
-                            text-align: center; 
-                        }
-                        img { 
-                            width: 200px; 
-                            height: 200px; 
-                        }
-                        .item-id { 
-                            margin-top: 10px; 
-                            font-size: 18px; 
-                            font-weight: bold; 
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="qr-container">
-                        <img src="${qrImage.src}" />
-                        <div class="item-id">${document.getElementById('qrItemId').textContent}</div>
-                    </div>
-                    <script>
-                        window.onload = function() {
-                            window.print();
-                            window.close();
-                        }
-                    <\/script>
-                </body>
-            </html>
-        `);
+    try {
+        var qrcodeDiv = document.getElementById('qrcode');
+        if (!qrcodeDiv) {
+            showToast('Elemen QR Code tidak ditemukan!', true);
+            return;
+        }
+
+        // Cari canvas atau img di dalam qrcode div
+        var qrImage = qrcodeDiv.querySelector('canvas');
+        var imgSrc = '';
+
+        if (qrImage) {
+            // Jika canvas, convert ke dataURL
+            imgSrc = qrImage.toDataURL('image/png');
+        } else {
+            // Coba cari img
+            qrImage = qrcodeDiv.querySelector('img');
+            if (qrImage) {
+                imgSrc = qrImage.src;
+            }
+        }
+
+        // Jika masih tidak ada, coba cari di dalam child lain
+        if (!imgSrc) {
+            var children = qrcodeDiv.querySelectorAll('*');
+            for (var i = 0; i < children.length; i++) {
+                if (children[i].tagName === 'CANVAS') {
+                    imgSrc = children[i].toDataURL('image/png');
+                    break;
+                } else if (children[i].tagName === 'IMG') {
+                    imgSrc = children[i].src;
+                    break;
+                }
+            }
+        }
+
+        if (!imgSrc || imgSrc === '' || imgSrc === 'data:,') {
+            showToast('QR Code belum tersedia! Silakan input data terlebih dahulu.', true);
+            return;
+        }
+
+        var itemIdEl = document.getElementById('qrItemId');
+        var itemId = itemIdEl ? itemIdEl.textContent : '';
+
+        // Buka window baru untuk print
+        var printWindow = window.open('', '_blank', 'width=400,height=500');
+        if (!printWindow) {
+            showToast('Popup blocker mencegah membuka jendela print!', true);
+            return;
+        }
+
+        var htmlContent = '<!DOCTYPE html>' +
+            '<html>' +
+            '<head>' +
+            '<title>Print QR Code - Inventaris</title>' +
+            '<style>' +
+            'body { margin: 0; padding: 20px; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }' +
+            '.container { text-align: center; border: 2px solid #333; padding: 20px; border-radius: 10px; }' +
+            'img { width: 180px; height: 180px; }' +
+            '.item-id { margin-top: 15px; font-size: 20px; font-weight: bold; font-family: monospace; }' +
+            '</style>' +
+            '</head>' +
+            '<body>' +
+            '<div class="container">' +
+            '<img src="' + imgSrc + '" />' +
+            '<div class="item-id">' + itemId + '</div>' +
+            '</div>' +
+            '<script>window.onload = function() { setTimeout(function() { window.print(); }, 300); }<\/script>' +
+            '</body>' +
+            '</html>';
+
+        printWindow.document.write(htmlContent);
         printWindow.document.close();
+
+    } catch (e) {
+        console.error('Print QR Error:', e);
+        showToast('Gagal print QR Code: ' + e.message, true);
     }
+}
+
+// ============================================
+// HELPER: Export PDF Style
+// ============================================
+function createPdfDoc(title, orientation) {
+    orientation = orientation || 'landscape';
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF(orientation, 'mm', 'a4');
+    var pageWidth = doc.internal.pageSize.getWidth();
+    var pageHeight = doc.internal.pageSize.getHeight();
+    var margin = 20;
+
+    // Header Logo
+    try {
+        doc.addImage('img/logo1.png', 'PNG', margin, 10, 35, 12);
+    } catch (e) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(79, 70, 229);
+        doc.text('ICONNET', margin, 18);
+    }
+
+    // Header Title - Modern Design
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(79, 70, 229); // Indigo 600
+    doc.text(title, pageWidth / 2, 20, { align: 'center' });
+
+    // Subtitle / Tanggal
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139); // Slate 500
+    doc.text('Dicetak pada: ' + formatDate(new Date()), pageWidth / 2, 28, { align: 'center' });
+
+    // Decorative Line
+    doc.setDrawColor(79, 70, 229);
+    doc.setLineWidth(0.8);
+    doc.line(margin, 35, pageWidth - margin, 35);
+
+    return { doc: doc, pageWidth: pageWidth, pageHeight: pageHeight };
+}
+
+function applyPdfTableStyle(doc, options) {
+    var pageWidth = doc.internal.pageSize.getWidth();
+    var pageHeight = doc.internal.pageSize.getHeight();
+
+    var defaultOptions = {
+        theme: 'grid',
+        styles: {
+            fontSize: 7.5,
+            cellPadding: 3,
+            overflow: 'linebreak',
+            valign: 'middle',
+            halign: 'center',
+            lineColor: [226, 232, 240], // Slate 200
+            lineWidth: 0.1,
+            font: 'helvetica'
+        },
+        headStyles: {
+            fillColor: [79, 70, 229], // Indigo 600
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center',
+            valign: 'middle',
+            fontSize: 8.5
+        },
+        bodyStyles: {
+            textColor: [30, 41, 59], // Slate 800
+        },
+        alternateRowStyles: {
+            fillColor: [248, 250, 252] // Slate 50
+        },
+        margin: { left: 15, right: 15, top: 35, bottom: 20 },
+        tableWidth: 'auto', // Auto-fit to page width
+        pageBreak: 'auto',
+        didDrawPage: function (data) {
+            // Footer
+            var pageNum = doc.internal.getNumberOfPages();
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(148, 163, 184); // Slate 400
+            doc.text('Halaman ' + data.pageNumber, pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+            // Branding Footer
+            doc.setFontSize(7);
+            doc.text('ICONNET - Inventory Management System', 15, pageHeight - 10);
+        }
+    };
+
+    // Merge options
+    if (options) {
+        for (var key in options) {
+            if (options.hasOwnProperty(key)) {
+                if (key === 'styles' || key === 'headStyles' || key === 'margin') {
+                    // Deep merge for some objects
+                    for (var subKey in options[key]) {
+                        defaultOptions[key][subKey] = options[key][subKey];
+                    }
+                } else {
+                    defaultOptions[key] = options[key];
+                }
+            }
+        }
+    }
+
+    return defaultOptions;
 }
 
 // ========================================
@@ -497,13 +1103,14 @@ function printQRCode() {
 function viewItem(id) {
     const item = inventoryData.find(i => i.id === id);
     if (!item) return;
-    
+
     // Store current item ID for print
     window.currentViewItemId = id;
-    
+
     document.getElementById('viewItemName').textContent = item.name || '-';
     document.getElementById('viewMerk').textContent = item.merk || '-';
     document.getElementById('viewSn').textContent = item.sn || '-';
+    document.getElementById('viewSnConverter').textContent = item.snConverter || '-';
     document.getElementById('viewLocation').textContent = item.lokasi || '-';
     document.getElementById('viewKondisiBefore').textContent = item.kondisiBefore || '-';
     document.getElementById('viewChecklist').textContent = item.checklist || '-';
@@ -528,13 +1135,13 @@ function viewItem(id) {
 function printBarcode() {
     const id = window.currentViewItemId;
     if (!id) return;
-    
+
     const item = inventoryData.find(i => i.id === id);
     if (!item) return;
-    
+
     // Create print window
     const printWindow = window.open('', '_blank', 'width=400,height=500');
-    
+
     printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -575,7 +1182,7 @@ function printBarcode() {
         </body>
         </html>
     `);
-    
+
     printWindow.document.close();
     setTimeout(() => {
         printWindow.print();
@@ -590,6 +1197,7 @@ function editItem(id) {
     document.getElementById('editItemName').value = item.name || '';
     document.getElementById('editMerk').value = item.merk || '';
     document.getElementById('editSn').value = item.sn || '';
+    document.getElementById('editSnConverter').value = item.snConverter || '';
     document.getElementById('editLocation').value = item.lokasi || '';
     document.getElementById('editKondisiBefore').value = item.kondisiBefore || 'Baik';
     document.getElementById('editChecklist').value = item.checklist || 'Tidak';
@@ -597,6 +1205,13 @@ function editItem(id) {
     document.getElementById('editCatatan').value = item.catatan || '';
     document.getElementById('editTanggalMasuk').value = item.tanggalMasuk || item.date || '';
     document.getElementById('editItemDate').value = item.date || '';
+
+    const snConverterRow = document.getElementById('editSnConverterRow');
+    if (item.name === 'Headset') {
+        snConverterRow.style.display = 'flex';
+    } else {
+        snConverterRow.style.display = 'none';
+    }
 
     document.getElementById('editModal').classList.add('show');
 }
@@ -607,6 +1222,7 @@ async function saveEdit() {
         name: document.getElementById('editItemName').value,
         merk: document.getElementById('editMerk').value,
         sn: document.getElementById('editSn').value,
+        snConverter: document.getElementById('editSnConverter').value,
         lokasi: document.getElementById('editLocation').value,
         kondisiBefore: document.getElementById('editKondisiBefore').value,
         checklist: document.getElementById('editChecklist').value,
@@ -672,7 +1288,7 @@ function deleteItem(id) {
 async function confirmDelete() {
     if (deleteItemId) {
         const success = await deleteInventoryItem(deleteItemId);
-        
+
         if (success) {
             deleteItemId = null;
             closeModal('deleteModal');
@@ -696,7 +1312,7 @@ async function exportToExcel() {
 
     // Get filter value
     const filterValue = document.getElementById('exportFilter') ? document.getElementById('exportFilter').value : 'all';
-    
+
     // Filter data based on selection
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
@@ -714,9 +1330,9 @@ async function exportToExcel() {
     const worksheet = workbook.addWorksheet('Inventory');
 
     // Add headers
-    const headers = ['ID', 'QR Code', 'Nama Barang', 'Merk', 'SN', 'Lokasi', 'Kondisi (Before)', 'Checklist', 'Kondisi (After)', 'Catatan', 'Tanggal'];
+    const headers = ['ID', 'QR Code', 'Nama Barang', 'Merk', 'SN', 'SN Converter', 'Lokasi', 'Kondisi (Before)', 'Kondisi (After)', 'Checklist', 'Catatan', 'Tanggal Barang Masuk', 'Tanggal Input'];
     const headerRow = worksheet.addRow(headers);
-    
+
     // Style header
     headerRow.eachCell((cell) => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -735,33 +1351,37 @@ async function exportToExcel() {
         { width: 20 }, // Nama Barang
         { width: 15 }, // Merk
         { width: 20 }, // SN
+        { width: 20 }, // SN Converter
         { width: 20 }, // Lokasi
         { width: 18 }, // Kondisi (Before)
-        { width: 12 }, // Checklist
         { width: 18 }, // Kondisi (After)
+        { width: 12 }, // Checklist
         { width: 25 }, // Catatan
-        { width: 15 }  // Tanggal
+        { width: 18 }, // Tanggal Barang Masuk
+        { width: 15 }  // Tanggal Input
     ];
 
     // Add data
     for (let i = 0; i < filteredData.length; i++) {
         const item = filteredData[i];
         const rowIndex = i + 2; // +1 for 1-based index, +1 for header
-        
+
         const rowData = [
             item.id,
             '', // Placeholder for QR code
             item.name,
             item.merk,
             item.sn,
+            item.snConverter || '',
             item.lokasi,
             item.kondisiBefore,
-            item.checklist,
             item.kondisiAfter,
+            item.checklist,
             item.catatan,
+            formatDate(item.tanggalMasuk),
             formatDate(item.date)
         ];
-        
+
         const row = worksheet.addRow(rowData);
         row.height = 80; // Make row tall enough for image
         row.eachCell((cell) => {
@@ -813,7 +1433,7 @@ async function exportToExcel() {
     anchor.download = `Inventory_${filterText}_${formatDate(new Date())}.xlsx`;
     anchor.click();
     window.URL.revokeObjectURL(url);
-    
+
     showToast('Berhasil export ke Excel dengan QR Code!');
 }
 
@@ -823,10 +1443,8 @@ function exportToPdf() {
         return;
     }
 
-    // Get filter value
     const filterValue = document.getElementById('exportFilter') ? document.getElementById('exportFilter').value : 'all';
-    
-    // Filter data based on selection
+
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
         filteredData = inventoryData.filter(item => item.name && item.name.toLowerCase() === filterValue.toLowerCase());
@@ -837,70 +1455,176 @@ function exportToPdf() {
         return;
     }
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const result = createPdfDoc('LAPORAN DATA INVENTARIS', 'landscape');
+    const doc = result.doc;
 
-    // Title - Centered
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    const title = 'LAPORAN INVENTORY KANTOR';
-    const titleWidth = doc.getTextWidth(title);
-    const pageWidth = doc.internal.pageSize.getWidth();
-    doc.text(title, (pageWidth - titleWidth) / 2, 22);
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const filterLabel = `Filter: ${filterValue === 'all' ? 'Semua Data' : filterValue}`;
-    const filterLabelWidth = doc.getTextWidth(filterLabel);
-    doc.text(filterLabel, (pageWidth - filterLabelWidth) / 2, 30);
-    
-    const dateText = `Tanggal: ${formatDate(new Date())}`;
-    const dateWidth = doc.getTextWidth(dateText);
-    doc.text(dateText, (pageWidth - dateWidth) / 2, 36);
-
-    // Table
-    const tableData = filteredData.map(item => [
+    const tableData = filteredData.map((item, index) => [
+        index + 1,
         item.id || '-',
         item.name || '-',
         item.merk || '-',
         item.sn || '-',
+        item.snConverter || '-',
         item.lokasi || '-',
         item.kondisiBefore || '-',
+        item.kondisiAfter || '-',
         item.checklist || '-',
-        item.kondisiAfter || '-'
+        item.catatan || '-',
+        formatTanggalIndonesia(item.tanggalMasuk),
+        formatTanggalIndonesia(item.date)
     ]);
 
-    doc.autoTable({
-        head: [['ID', 'Nama', 'Merk', 'SN', 'Lokasi', 'Kondisi(B)', 'Checklist', 'Kondisi(A)']],
+    const tableOptions = applyPdfTableStyle(doc, {
+        head: [['No', 'ID', 'Nama', 'Merk', 'SN', 'SN Conv', 'Lokasi', 'Kondisi(B)', 'Kondisi(A)', 'Cek', 'Catatan', 'Tgl Barang Masuk', 'Tgl Input']],
         body: tableData,
-        startY: 38,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 3, overflow: 'wrap', halign: 'center', valign: 'middle' },
-        headStyles: { 
-            fillColor: [3, 122, 137],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            halign: 'center'
-        },
-        bodyStyles: { halign: 'center' },
-        alternateRowStyles: { fillColor: [245, 250, 255] },
-        margin: { left: 10, right: 30 },
         columnStyles: {
-            0: { cellWidth: 18, minCellHeight: 8 },
-            1: { cellWidth: 30, minCellHeight: 8 },
-            2: { cellWidth: 22, minCellHeight: 8 },
-            3: { cellWidth: 35, minCellHeight: 8 },
-            4: { cellWidth: 25, minCellHeight: 8 },
-            5: { cellWidth: 30, minCellHeight: 8 },
-            6: { cellWidth: 18, minCellHeight: 8 },
-            7: { cellWidth: 15, minCellHeight: 8 }
+            0: { cellWidth: 10, halign: 'center' },
+            1: { cellWidth: 18 },
+            2: { cellWidth: 20, halign: 'left' },
+            3: { cellWidth: 18 },
+            4: { cellWidth: 22 },
+            5: { cellWidth: 20 },
+            6: { cellWidth: 22, halign: 'left' },
+            7: { cellWidth: 16 },
+            8: { cellWidth: 16 },
+            9: { cellWidth: 10 },
+            10: { cellWidth: 35, halign: 'left' },
+            11: { cellWidth: 30 },
+            12: { cellWidth: 'auto' }
         }
     });
 
+    doc.autoTable(tableOptions);
+
     const filterText = filterValue === 'all' ? 'Semua' : filterValue;
-    doc.save(`Inventory_${filterText}_${formatDate(new Date())}.pdf`);
-    
+    doc.save(`Inventory_${filterText}_${new Date().toISOString().split('T')[0]}.pdf`);
     showToast('Berhasil export ke PDF!');
+}
+
+// ========================================
+// GENERATE QR FOR SELECTED ITEMS
+// ========================================
+function generateQRForSelected() {
+    const selected = Array.from(selectedItems);
+
+    if (selected.length === 0) {
+        showToast('Pilih item terlebih dahulu!', true);
+        return;
+    }
+
+    let successCount = 0;
+    let alreadyExistCount = 0;
+    let errorCount = 0;
+
+    selected.forEach(id => {
+        const item = inventoryData.find(i => i.id === id);
+        if (!item) return;
+
+        // CEK DULU: Apakah QR sudah ada?
+        if (item.qrCode && item.qrCode.length > 0) {
+            // QR sudah ada - jangan generate ulang
+            alreadyExistCount++;
+            console.log(`QR already exists for item: ${item.id} - ${item.name}`);
+            return;
+        }
+
+        // QR belum ada - generate baru
+        // Konsisten: QR selalu dibuat dari SN (jika ada), kalau tidak dari ID
+        const qrValue = item.sn || item.id;
+
+        if (!qrValue) {
+            console.log(`Cannot generate QR: no SN or ID for item: ${item.id}`);
+            errorCount++;
+            return;
+        }
+
+        // Generate QR code menggunakan QRCode library
+        const qrContainer = document.createElement('div');
+        qrContainer.style.display = 'none';
+        document.body.appendChild(qrContainer);
+
+        try {
+            new QRCode(qrContainer, {
+                text: qrValue,
+                width: 128,
+                height: 128,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            // Tunggu QR code selesai digenerate
+            setTimeout(() => {
+                const canvas = qrContainer.querySelector('canvas');
+                const img = qrContainer.querySelector('img');
+
+                let qrBase64 = '';
+                if (canvas) {
+                    qrBase64 = canvas.toDataURL('image/png');
+                } else if (img) {
+                    qrBase64 = img.src;
+                }
+
+                if (qrBase64) {
+                    // Update local data
+                    item.qrCode = qrBase64;
+                    item.qrData = qrValue; // Simpan value untuk konsistensi
+
+                    // Save ke database
+                    fetch(`/api/inventory/${item.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            qrCode: qrBase64,
+                            qrData: qrValue
+                        })
+                    })
+                        .then(res => res.json())
+                        .then(result => {
+                            if (result.success) {
+                                successCount++;
+                                console.log(`QR generated successfully for: ${item.id}`);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error saving QR:', err);
+                            errorCount++;
+                        });
+                }
+
+                // Clean up
+                document.body.removeChild(qrContainer);
+            }, 100);
+        } catch (e) {
+            console.error('Error generating QR:', e);
+            errorCount++;
+            if (qrContainer.parentNode) {
+                document.body.removeChild(qrContainer);
+            }
+        }
+    });
+
+    // Tampilkan hasil setelah proses
+    setTimeout(() => {
+        let message = '';
+
+        if (alreadyExistCount > 0 && successCount === 0) {
+            message = `QR Code sudah tersedia untuk ${alreadyExistCount} item!`;
+            showToast(message, true);
+        } else if (alreadyExistCount > 0 && successCount > 0) {
+            message = `${successCount} QR baru digenerate, ${alreadyExistCount} sudah ada!`;
+            showToast(message);
+        } else if (successCount > 0) {
+            message = `${successCount} QR Code berhasil digenerate!`;
+            showToast(message);
+            updateInventoryTable();
+        } else if (errorCount > 0) {
+            message = `${errorCount} QR gagal digenerate!`;
+            showToast(message, true);
+        } else {
+            showToast('Tidak ada QR yang perlu digenerate!', true);
+        }
+    }, 800);
 }
 
 // ========================================
@@ -919,13 +1643,13 @@ function formatDate(dateStr) {
 function showToast(message, isError = false) {
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toastMessage');
-    
+
     toastMessage.textContent = message;
     toast.classList.toggle('error', isError);
     toast.querySelector('i').className = isError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
-    
+
     toast.classList.add('show');
-    
+
     setTimeout(() => {
         toast.classList.remove('show');
     }, 3000);
@@ -936,12 +1660,19 @@ function showToast(message, isError = false) {
 // ========================================
 let checkedItems = {};
 let html5QrcodeScanner = null;
+let scanInitialized = false;
 
 function initScanPage() {
     loadCheckedItems();
     renderScanTable();
     updateScanStats();
-    
+
+    if (scanInitialized) {
+        const scanInput = document.getElementById('scanInput');
+        if (scanInput) scanInput.focus();
+        return;
+    }
+
     // Set up scan input
     const scanInput = document.getElementById('scanInput');
     const scanBtn = document.getElementById('scanBtn');
@@ -950,43 +1681,59 @@ function initScanPage() {
     const closeScannerBtn = document.getElementById('closeScannerBtn');
     const exportExcelBtn = document.getElementById('exportCheckExcelBtn');
     const exportPdfBtn = document.getElementById('exportCheckPdfBtn');
-    
+
     if (scanBtn) {
         scanBtn.addEventListener('click', performScan);
     }
-    
+
     if (scanInput) {
-        scanInput.addEventListener('keypress', function(e) {
+        scanInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 performScan();
             }
         });
         scanInput.focus();
     }
-    
+
     // Camera button
     if (cameraBtn) {
         cameraBtn.addEventListener('click', toggleCamera);
     }
-    
+
     // Close scanner button
     if (closeScannerBtn) {
         closeScannerBtn.addEventListener('click', stopCamera);
     }
-    
+
     // Reset button
     if (resetBtn) {
-        resetBtn.addEventListener('click', function() {
-            if (confirm('Apakah Anda yakin ingin mereset semua checklist?')) {
-                checkedItems = {};
-                saveCheckedItems();
-                renderScanTable();
-                updateScanStats();
-                showToast('Checklist telah direset');
+        resetBtn.addEventListener('click', async function () {
+            if (confirm('Apakah Anda yakin ingin mereset semua checklist di database?')) {
+                try {
+                    const response = await fetch('/api/inventory/reset-checklist', { method: 'POST' });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        checkedItems = {};
+                        saveCheckedItems();
+
+                        // Update local inventoryData
+                        inventoryData.forEach(item => item.checklist = 'Tidak');
+
+                        renderScanTable();
+                        updateScanStats();
+                        showToast('Semua status checklist telah direset');
+                    } else {
+                        showToast('Gagal mereset checklist!', true);
+                    }
+                } catch (error) {
+                    console.error('Error resetting checklist:', error);
+                    showToast('Terjadi kesalahan saat mereset!', true);
+                }
             }
         });
     }
-    
+
     // Export buttons
     if (exportExcelBtn) {
         exportExcelBtn.addEventListener('click', exportChecklistToExcel);
@@ -994,21 +1741,39 @@ function initScanPage() {
     if (exportPdfBtn) {
         exportPdfBtn.addEventListener('click', exportChecklistToPdf);
     }
-    
+
     // Scan filter dropdown
     const scanFilter = document.getElementById('scanFilter');
     if (scanFilter) {
-        scanFilter.addEventListener('change', function() {
+        scanFilter.addEventListener('change', function () {
+            scanPage = 1;
             renderScanTable();
             updateScanStats();
         });
+    }
+
+    // Scan view limit dropdown
+    const scanViewLimit = document.getElementById('scanViewLimit');
+    if (scanViewLimit) {
+        scanViewLimit.addEventListener('change', function () {
+            var newLimit = parseInt(this.value);
+            scanItemsPerPage = newLimit;
+            scanPage = 1;
+            renderScanTable();
+        });
+    }
+
+    // Handover delete selected button
+    const deleteHandoverSelectedBtn = document.getElementById('deleteHandoverSelectedBtn');
+    if (deleteHandoverSelectedBtn) {
+        deleteHandoverSelectedBtn.addEventListener('click', deleteSelectedHandover);
     }
 }
 
 function toggleCamera() {
     const scannerContainer = document.getElementById('scannerContainer');
     const scanInput = document.getElementById('scanInput');
-    
+
     if (scannerContainer.style.display === 'none') {
         scannerContainer.style.display = 'block';
         startCamera();
@@ -1021,11 +1786,11 @@ function startCamera() {
     if (html5QrcodeScanner) {
         return;
     }
-    
+
     html5QrcodeScanner = new Html5Qrcode("reader");
-    
+
     const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-    
+
     html5QrcodeScanner.start(
         { facingMode: "environment" },
         config,
@@ -1039,7 +1804,7 @@ function startCamera() {
 
 function stopCamera() {
     const scannerContainer = document.getElementById('scannerContainer');
-    
+
     if (html5QrcodeScanner) {
         html5QrcodeScanner.stop().then(() => {
             html5QrcodeScanner = null;
@@ -1057,18 +1822,18 @@ function stopCamera() {
 function onScanSuccess(decodedText, decodedResult) {
     // Handle the scanned code
     const scanInput = document.getElementById('scanInput');
-    
+
     // Parse JSON if QR contains data like {"id":"INV-001","name":"monitor",...}
     let searchId = decodedText;
     try {
         const parsed = JSON.parse(decodedText);
         // Extract ID from JSON object
         searchId = parsed.id || decodedText;
-    } catch(e) {
+    } catch (e) {
         // Not JSON, use as-is
         searchId = decodedText;
     }
-    
+
     scanInput.value = searchId;
     performScan();
     stopCamera();
@@ -1078,142 +1843,272 @@ function onScanFailure(error) {
     // Handle scan failure, usually better to ignore and keep scanning
 }
 
-function performScan() {
+async function performScan() {
     const scanInput = document.getElementById('scanInput');
     const searchValue = scanInput.value.trim().toUpperCase();
-    
+
     if (!searchValue) {
         showToast('Mohon masukkan ID atau barcode', true);
         return;
     }
-    
-    // Find item by ID (INV-001, INV-002, etc) or by SN
-    const item = inventoryData.find(i => 
-        (i.id && i.id.toUpperCase() === searchValue) ||
-        (i.sn && i.sn.toUpperCase().includes(searchValue))
-    );
-    
-    if (item) {
-        const alreadyChecked = checkedItems[item.id] && checkedItems[item.id].checked;
-        
-        // Mark as checked
-        checkedItems[item.id] = {
-            checked: true,
-            checkTime: new Date().toISOString()
-        };
-        saveCheckedItems();
-        renderScanTable();
-        updateScanStats();
-        scanInput.value = '';
-        scanInput.focus();
 
-        // Show scan result popup
-        showScanResultPopup(item, alreadyChecked);
-    } else {
-        showToast('Barang tidak ditemukan!', true);
+    try {
+        const response = await fetch('/api/inventory/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ searchValue })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            const item = data.item;
+            const alreadyChecked = data.status === 'already_checked';
+
+            // Sync local inventoryData
+            const localIdx = inventoryData.findIndex(i => i.id === item.id);
+            if (localIdx !== -1) {
+                inventoryData[localIdx].checklist = 'Ya';
+            }
+
+            // Update local checkedItems for immediate UI updates
+            checkedItems[item.id] = {
+                checked: true,
+                checkTime: new Date().toISOString()
+            };
+
+            saveCheckedItems();
+            renderScanTable();
+            updateScanStats();
+
+            // Clear input FIRST to prevent double trigger
+            scanInput.value = '';
+            scanInput.focus();
+
+            // Show scan result popup
+            showScanResultPopup(item, alreadyChecked);
+        } else {
+            showToast(data.status === 'not_found' ? 'Barang tidak ditemukan!' : (data.message || 'Error checking item'), true);
+        }
+    } catch (error) {
+        console.error('Error in performScan:', error);
+        showToast('Gagal melakukan pengecekan!', true);
     }
 }
 
 function showScanResultPopup(item, isDuplicate) {
+    const modal = document.getElementById('scanResultModal');
     const header = document.getElementById('scanResultHeader');
     const title = document.getElementById('scanResultTitle');
     const statusDiv = document.getElementById('scanResultStatus');
     const tableBody = document.getElementById('scanResultTableBody');
 
-    // Set header style based on first scan or duplicate
-    header.className = 'modal-header ' + (isDuplicate ? 'header-duplicate' : 'header-new');
-    title.textContent = isDuplicate ? '⚠ Barang Sudah Pernah Dicek' : '✓ Berhasil Dicek';
+    // ===== WARNA POPUP BERDASARKAN STATUS =====
+    // HIJAU = Belum pernah dicek (pertama kali)
+    // KUNING = Sudah pernah dicek sebelumnya
 
-    // Set status message
     if (isDuplicate) {
+        // SUDAH PERNAH DICEK - KUNING
+        modal.classList.remove('scan-result-modal-new');
+        modal.classList.add('scan-result-modal-duplicate');
+        title.textContent = '⚠ Barang Sudah Pernah Dicek';
+
         statusDiv.className = 'scan-result-status-duplicate';
         statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Barang ini sudah pernah discan sebelumnya!';
     } else {
+        // BELUM PERNAH DICEK - HIJAU
+        modal.classList.remove('scan-result-modal-duplicate');
+        modal.classList.add('scan-result-modal-new');
+        title.textContent = '✓ Berhasil Dicek';
+
         statusDiv.className = 'scan-result-status-new';
         statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Barang berhasil dicek untuk pertama kali.';
     }
 
-    // Build table with item data
+    // Build table with item data - MODERN LAYOUT
+    const statusValue = isDuplicate
+        ? '<span class="status-value checked"><i class="fas fa-check-circle"></i> Sudah Dicek</span>'
+        : '<span class="status-value checked"><i class="fas fa-check-circle"></i> Pertama Kali</span>';
+
     tableBody.innerHTML = `
-        <tr><td>ID</td><td>${item.id || '-'}</td></tr>
-        <tr><td>Nama Barang</td><td>${item.name || '-'}</td></tr>
-        <tr><td>Merk</td><td>${item.merk || '-'}</td></tr>
-        <tr><td>SN</td><td>${item.sn || '-'}</td></tr>
-        <tr><td>Lokasi</td><td>${item.lokasi || '-'}</td></tr>
-        <tr><td>Kondisi (Before)</td><td>${item.kondisiBefore || '-'}</td></tr>
-        <tr><td>Checklist</td><td>${item.checklist || '-'}</td></tr>
-        <tr><td>Kondisi (After)</td><td>${item.kondisiAfter || '-'}</td></tr>
-        <tr><td>Catatan</td><td>${item.catatan || '-'}</td></tr>
-        <tr><td>Tanggal</td><td>${formatDate(item.date)}</td></tr>
-        <tr><td>Waktu Dicek</td><td>${formatDateTime(new Date().toISOString())}</td></tr>
+        <tr>
+            <td>ID</td>
+            <td><span class="barcode-value">${item.id || '-'}</span></td>
+        </tr>
+        <tr>
+            <td>Nama Barang</td>
+            <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
+        </tr>
+        <tr>
+            <td>Merk</td>
+            <td>${item.merk || '-'}</td>
+        </tr>
+        <tr>
+            <td>SN</td>
+            <td><span class="barcode-value">${item.sn || '-'}</span></td>
+        </tr>
+        <tr>
+            <td>SN Converter</td>
+            <td><span class="barcode-value">${item.snConverter || '-'}</span></td>
+        </tr>
+        <tr>
+            <td>Lokasi</td>
+            <td>${item.lokasi || '-'}</td>
+        </tr>
+        <tr>
+            <td>Kondisi</td>
+            <td><span class="status-badge ${(item.kondisiBefore || '').replace(/\s+/g, '_')}">${item.kondisiBefore || '-'}</span></td>
+        </tr>
+        <tr>
+            <td>Checklist</td>
+            <td>${item.checklist || '-'}</td>
+        </tr>
+        <tr>
+            <td>Status</td>
+            <td>${statusValue}</td>
+        </tr>
+        <tr>
+            <td>Waktu Dicek</td>
+            <td>${formatDateTime(new Date().toISOString())}</td>
+        </tr>
     `;
 
     // Show modal
-    document.getElementById('scanResultModal').classList.add('show');
+    modal.classList.add('show');
+}
+
+// SCAN PAGINATION
+let scanPage = 1;
+let scanItemsPerPage = 10;
+
+function changeScanPage(direction) {
+    const filterSelect = document.getElementById('scanFilter');
+    const filterValue = filterSelect ? filterSelect.value : 'all';
+    const limitSelect = document.getElementById('scanViewLimit');
+    scanItemsPerPage = parseInt(limitSelect.value);
+
+    let filtered = inventoryData;
+    if (filterValue !== 'all') {
+        filtered = inventoryData.filter(item => item.name === filterValue);
+    }
+
+    const totalPages = Math.ceil(filtered.length / scanItemsPerPage);
+    scanPage += direction;
+
+    if (scanPage < 1) scanPage = 1;
+    if (scanPage > totalPages) scanPage = totalPages;
+
+    renderScanTable();
+}
+
+function goToScanPage(page) {
+    scanPage = page;
+    renderScanTable();
 }
 
 function renderScanTable() {
     const tableBody = document.getElementById('scanTableBody');
     if (!tableBody) return;
-    
-    // Get filter value
+
     const filterSelect = document.getElementById('scanFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
-    
-    // Filter inventory data
+    const limitSelect = document.getElementById('scanViewLimit');
+    scanItemsPerPage = parseInt(limitSelect.value);
+
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
         filteredData = inventoryData.filter(item => item.name === filterValue);
     }
-    
-    if (filteredData.length === 0) {
+
+    const totalItems = filteredData.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / scanItemsPerPage));
+
+    if (scanPage > totalPages) scanPage = totalPages;
+    if (scanPage < 1) scanPage = 1;
+
+    const startIndex = (scanPage - 1) * scanItemsPerPage;
+    const endIndex = Math.min(startIndex + scanItemsPerPage, totalItems);
+    const paginatedData = totalItems > 0 ? filteredData.slice(startIndex, endIndex) : [];
+
+    const pagination = document.getElementById('scanPagination');
+    const showingStart = document.getElementById('scanShowingStart');
+    const showingEnd = document.getElementById('scanShowingEnd');
+    const totalData = document.getElementById('scanTotalData');
+    const prevBtn = document.getElementById('scanPrevBtn');
+    const nextBtn = document.getElementById('scanNextBtn');
+    const pageNumbers = document.getElementById('scanPageNumbers');
+
+    if (totalItems === 0) {
         tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Tidak ada data inventaris</td></tr>';
+        if (pagination) pagination.style.display = 'none';
         return;
     }
-    
-    tableBody.innerHTML = filteredData.map(item => {
+
+    if (pagination) pagination.style.display = 'flex';
+
+    tableBody.innerHTML = paginatedData.map(item => {
         const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
         const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
         const rowClass = isChecked ? 'scan-item-checked' : '';
-        const statusIcon = isChecked ? '<i class="fas fa-check-circle" style="color: #28a745;"></i>' : '<i class="fas fa-circle" style="color: #dc3545;"></i>';
-        const statusText = isChecked ? 'Sudah Dicek' : 'Belum Dicek';
-        
+        const statusBadge = isChecked
+            ? '<span class="status-badge checked">Sudah Dicek</span>'
+            : '<span class="status-badge unchecked">Belum Dicek</span>';
+
         return `
             <tr class="${rowClass}" data-id="${item.id}">
-                <td>${statusIcon}</td>
-                <td>${item.id || '-'}</td>
-                <td>${item.name || '-'}</td>
+                <td>${statusBadge}</td>
+                <td><span class="barcode-display">${item.id || '-'}</span></td>
+                <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
                 <td>${item.merk || '-'}</td>
-                <td>${item.sn || '-'}</td>
+                <td><span class="barcode-display">${item.sn || '-'}</span></td>
                 <td>${item.lokasi || '-'}</td>
                 <td>${checkTime ? formatDateTime(checkTime) : '-'}</td>
             </tr>
         `;
     }).join('');
+
+    if (showingStart) showingStart.textContent = totalItems > 0 ? startIndex + 1 : 0;
+    if (showingEnd) showingEnd.textContent = endIndex;
+    if (totalData) totalData.textContent = totalItems;
+
+    if (prevBtn) prevBtn.disabled = scanPage === 1;
+    if (nextBtn) nextBtn.disabled = scanPage >= totalPages;
+
+    if (pageNumbers) {
+        let html = '';
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= scanPage - 1 && i <= scanPage + 1)) {
+                html += `<button class="page-number ${i === scanPage ? 'active' : ''}" onclick="goToScanPage(${i})">${i}</button>`;
+            } else if (i === scanPage - 2 || i === scanPage + 2) {
+                html += `<span class="ellipsis">...</span>`;
+            }
+        }
+        pageNumbers.innerHTML = html;
+    }
 }
 
 function updateScanStats() {
     // Get filter value
     const filterSelect = document.getElementById('scanFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
-    
+
     // Filter inventory data for stats
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
         filteredData = inventoryData.filter(item => item.name === filterValue);
     }
-    
+
     const total = filteredData.length;
     let checked = 0;
-    
+
     filteredData.forEach(item => {
         if (checkedItems[item.id] && checkedItems[item.id].checked) {
             checked++;
         }
     });
-    
+
     const unchecked = total - checked;
-    
+
     document.getElementById('totalToCheck').textContent = total;
     document.getElementById('totalChecked').textContent = checked;
     document.getElementById('totalUnchecked').textContent = unchecked;
@@ -1252,13 +2147,13 @@ async function exportChecklistToExcel() {
     // Get filter value
     const filterSelect = document.getElementById('scanFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
-    
+
     // Filter inventory data
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
         filteredData = inventoryData.filter(item => item.name === filterValue);
     }
-    
+
     if (filteredData.length === 0) {
         showToast('Tidak ada data untuk diexport!', true);
         return;
@@ -1270,9 +2165,9 @@ async function exportChecklistToExcel() {
     const worksheet = workbook.addWorksheet('Cek Inventaris');
 
     // Add headers
-    const headers = ['Status', 'ID', 'QR Code', 'Nama Barang', 'Merk', 'SN', 'Lokasi', 'Waktu Cek'];
+    const headers = ['Status', 'ID', 'QR Code', 'Nama Barang', 'Merk', 'SN', 'SN Converter', 'Lokasi', 'Kondisi (Before)', 'Kondisi (After)', 'Checklist', 'Waktu Cek'];
     const headerRow = worksheet.addRow(headers);
-    
+
     // Style header
     headerRow.eachCell((cell) => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1292,7 +2187,11 @@ async function exportChecklistToExcel() {
         { width: 20 }, // Nama Barang
         { width: 15 }, // Merk
         { width: 20 }, // SN
+        { width: 20 }, // SN Converter
         { width: 20 }, // Lokasi
+        { width: 18 }, // Kondisi (Before)
+        { width: 18 }, // Kondisi (After)
+        { width: 12 }, // Checklist
         { width: 20 }  // Waktu Cek
     ];
 
@@ -1302,7 +2201,7 @@ async function exportChecklistToExcel() {
         const rowIndex = i + 2;
         const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
         const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
-        
+
         const rowData = [
             isChecked ? 'Sudah Dicek' : 'Belum Dicek',
             item.id,
@@ -1310,10 +2209,14 @@ async function exportChecklistToExcel() {
             item.name,
             item.merk,
             item.sn,
+            item.snConverter || '',
             item.lokasi,
+            item.kondisiBefore,
+            item.kondisiAfter,
+            item.checklist,
             checkTime ? formatDateTime(checkTime) : '-'
         ];
-        
+
         const row = worksheet.addRow(rowData);
         row.height = 80;
         row.eachCell((cell) => {
@@ -1365,94 +2268,82 @@ async function exportChecklistToExcel() {
     anchor.download = `Cek_Inventaris_${formatDate(new Date())}.xlsx`;
     anchor.click();
     window.URL.revokeObjectURL(url);
-    
+
     showToast('Berhasil export checklist ke Excel!');
 }
 
 // Export checklist to PDF
 function exportChecklistToPdf() {
-    if (inventoryData.length === 0) {
-        showToast('Tidak ada data untuk diexport!', true);
-        return;
-    }
-
-    // Get filter value
-    const filterSelect = document.getElementById('scanFilter');
-    const filterValue = filterSelect ? filterSelect.value : 'all';
-    
-    // Filter inventory data
-    let filteredData = inventoryData;
-    if (filterValue !== 'all') {
-        filteredData = inventoryData.filter(item => item.name === filterValue);
-    }
-    
-    if (filteredData.length === 0) {
-        showToast('Tidak ada data untuk diexport!', true);
-        return;
-    }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    // Title - Centered
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    const title = 'LAPORAN CEK INVENTARIS';
-    const titleWidth = doc.getTextWidth(title);
-    const pageWidth = doc.internal.pageSize.getWidth();
-    doc.text(title, (pageWidth - titleWidth) / 2, 22);
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const dateText = `Tanggal: ${formatDate(new Date())}`;
-    const dateWidth = doc.getTextWidth(dateText);
-    doc.text(dateText, (pageWidth - dateWidth) / 2, 30);
-
-    // Table
-    const tableData = filteredData.map(item => {
-        const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
-        const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
-        
-        return [
-            item.id || '-',
-            item.name || '-',
-            item.merk || '-',
-            item.sn || '-',
-            item.lokasi || '-',
-            checkTime ? formatDateTime(checkTime) : '-',
-            isChecked ? '✓' : '✗'
-        ];
-    });
-
-    doc.autoTable({
-        head: [['ID', 'Nama', 'Merk', 'SN', 'Lokasi', 'Waktu Cek', 'Status']],
-        body: tableData,
-        startY: 38,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 3, overflow: 'wrap', halign: 'center', valign: 'middle' },
-        headStyles: { 
-            fillColor: [3, 122, 137],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            halign: 'center'
-        },
-        bodyStyles: { halign: 'center' },
-        alternateRowStyles: { fillColor: [245, 250, 255] },
-        margin: 20,
-        columnStyles: {
-            0: { cellWidth: 18, minCellHeight: 8 },
-            1: { cellWidth: 30, minCellHeight: 8 },
-            2: { cellWidth: 22, minCellHeight: 8 },
-            3: { cellWidth: 35, minCellHeight: 8 },
-            4: { cellWidth: 25, minCellHeight: 8 },
-            5: { cellWidth: 30, minCellHeight: 8 },
-            6: { cellWidth: 15, minCellHeight: 8, halign: 'center' }
+    try {
+        if (!inventoryData || inventoryData.length === 0) {
+            showToast('Tidak ada data untuk diexport!', true);
+            return;
         }
-    });
 
-    doc.save(`Cek_Inventaris_${formatDate(new Date())}.pdf`);
-    
-    showToast('Berhasil export checklist ke PDF!');
+        var filterSelect = document.getElementById('scanFilter');
+        var filterValue = filterSelect ? filterSelect.value : 'all';
+
+        var filteredData = [];
+        for (var i = 0; i < inventoryData.length; i++) {
+            var item = inventoryData[i];
+            if (!item) continue;
+            if (filterValue !== 'all' && item.name !== filterValue) continue;
+            filteredData.push(item);
+        }
+
+        if (filteredData.length === 0) {
+            showToast('Tidak ada data untuk diexport!', true);
+            return;
+        }
+
+        var result = createPdfDoc('LAPORAN CEK INVENTARIS', 'landscape');
+        var doc = result.doc;
+
+        var tableData = filteredData.map(item => {
+            var isChecked = checkedItems && checkedItems[item.id] && checkedItems[item.id].checked;
+            var checkTime = isChecked && checkedItems[item.id].checkTime ? checkedItems[item.id].checkTime : null;
+            return [
+                item.id || '-',
+                item.name || '-',
+                item.merk || '-',
+                item.sn || '-',
+                item.snConverter || '-',
+                item.lokasi || '-',
+                item.kondisiBefore || '-',
+                item.kondisiAfter || '-',
+                item.checklist || '-',
+                checkTime ? formatDateTime(checkTime) : '-',
+                isChecked ? '✓' : '✗'
+            ];
+        });
+
+        var tableOptions = applyPdfTableStyle(doc, {
+            head: [['ID', 'Nama', 'Merk', 'SN', 'SN Conv', 'Lokasi', 'Kondisi(B)', 'Kondisi(A)', 'Checklist', 'Waktu Cek', 'Status']],
+            body: tableData,
+            columnStyles: {
+                0: { cellWidth: 20 },
+                1: { cellWidth: 30, halign: 'left' },
+                2: { cellWidth: 20 },
+                3: { cellWidth: 30 },
+                4: { cellWidth: 25 },
+                5: { cellWidth: 30, halign: 'left' },
+                6: { cellWidth: 20 },
+                7: { cellWidth: 20 },
+                8: { cellWidth: 15 },
+                9: { cellWidth: 30 },
+                10: { cellWidth: 'auto', halign: 'center' }
+            }
+        });
+
+        doc.autoTable(tableOptions);
+
+        doc.save('Cek_Inventaris_' + formatDate(new Date()) + '.pdf');
+        showToast('Berhasil export PDF!');
+
+    } catch (e) {
+        console.error('Export PDF Error:', e);
+        showToast('Gagal export PDF: ' + e.message, true);
+    }
 }
 
 // ========================================
@@ -1471,10 +2362,13 @@ async function loadHistory() {
     }
 }
 
-function renderHistoryTable() {
-    const tableBody = document.getElementById('historyTableBody');
-    const emptyState = document.getElementById('historyEmptyState');
-    if (!tableBody) return;
+// HISTORY PAGINATION
+let historyPage = 1;
+let historyItemsPerPage = 10;
+
+function changeHistoryPage(direction) {
+    const limitSelect = document.getElementById('historyViewLimit');
+    historyItemsPerPage = parseInt(limitSelect.value);
 
     const search = document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value.toLowerCase() : '';
     const actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
@@ -1484,7 +2378,7 @@ function renderHistoryTable() {
         if (actionFilter !== 'all' && h.action !== actionFilter) return false;
         if (itemFilter !== 'all' && (!h.itemName || h.itemName.toLowerCase() !== itemFilter.toLowerCase())) return false;
         if (search) {
-            const matchesSearch = 
+            const matchesSearch =
                 (h.itemId && h.itemId.toLowerCase().includes(search)) ||
                 (h.itemName && h.itemName.toLowerCase().includes(search)) ||
                 (h.itemMerk && h.itemMerk.toLowerCase().includes(search)) ||
@@ -1496,16 +2390,82 @@ function renderHistoryTable() {
         return true;
     });
 
-    if (filtered.length === 0) {
+    const totalPages = Math.ceil(filtered.length / historyItemsPerPage);
+    historyPage += direction;
+
+    if (historyPage < 1) historyPage = 1;
+    if (historyPage > totalPages) historyPage = totalPages;
+
+    renderHistoryTable();
+}
+
+function goToHistoryPage(page) {
+    historyPage = page;
+    renderHistoryTable();
+}
+
+function renderHistoryTable() {
+    const tableBody = document.getElementById('historyTableBody');
+    const emptyState = document.getElementById('historyEmptyState');
+    if (!tableBody) return;
+
+    const selectAllCheckbox = document.getElementById('selectAllHistoryCheckbox');
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+
+    const search = document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value.toLowerCase() : '';
+    const actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
+    const itemFilter = document.getElementById('historyItemFilter') ? document.getElementById('historyItemFilter').value : 'all';
+    const limitSelect = document.getElementById('historyViewLimit');
+    historyItemsPerPage = parseInt(limitSelect.value);
+
+    let filtered = historyData.filter(h => {
+        if (actionFilter !== 'all' && h.action !== actionFilter) return false;
+        if (itemFilter !== 'all' && (!h.itemName || h.itemName.toLowerCase() !== itemFilter.toLowerCase())) return false;
+        if (search) {
+            const matchesSearch =
+                (h.itemId && h.itemId.toLowerCase().includes(search)) ||
+                (h.itemName && h.itemName.toLowerCase().includes(search)) ||
+                (h.itemMerk && h.itemMerk.toLowerCase().includes(search)) ||
+                (h.itemSn && h.itemSn.toLowerCase().includes(search)) ||
+                (h.itemLokasi && h.itemLokasi.toLowerCase().includes(search)) ||
+                (h.details && h.details.toLowerCase().includes(search));
+            if (!matchesSearch) return false;
+        }
+        return true;
+    });
+
+    const totalItems = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / historyItemsPerPage));
+
+    if (historyPage > totalPages) historyPage = totalPages;
+    if (historyPage < 1) historyPage = 1;
+
+    const startIndex = (historyPage - 1) * historyItemsPerPage;
+    const endIndex = Math.min(startIndex + historyItemsPerPage, totalItems);
+    const paginatedData = totalItems > 0 ? filtered.slice(startIndex, endIndex) : [];
+
+    const pagination = document.getElementById('historyPagination');
+    const showingStart = document.getElementById('historyShowingStart');
+    const showingEnd = document.getElementById('historyShowingEnd');
+    const totalData = document.getElementById('historyTotalData');
+    const prevBtn = document.getElementById('historyPrevBtn');
+    const nextBtn = document.getElementById('historyNextBtn');
+    const pageNumbers = document.getElementById('historyPageNumbers');
+
+    if (totalItems === 0) {
         tableBody.innerHTML = '';
         if (emptyState) emptyState.style.display = 'block';
+        if (pagination) pagination.style.display = 'none';
     } else {
         if (emptyState) emptyState.style.display = 'none';
-        tableBody.innerHTML = filtered.map(h => {
+        if (pagination) pagination.style.display = 'flex';
+
+        tableBody.innerHTML = paginatedData.map(h => {
             const actionClass = h.action.toLowerCase();
             const actionLabel = h.action === 'CREATE' ? 'Input' : h.action === 'UPDATE' ? 'Update' : 'Delete';
             return `
                 <tr>
+                    <td><input type="checkbox" class="history-row-checkbox" value="${h.id}" ${selectedHistoryItems.has(h.id) ? 'checked' : ''} onchange="toggleHistorySelection('${h.id}')"></td>
                     <td><span class="history-action-badge ${actionClass}">${actionLabel}</span></td>
                     <td>${h.itemId || '-'}</td>
                     <td>${h.itemName || '-'}</td>
@@ -1517,127 +2477,270 @@ function renderHistoryTable() {
                 </tr>
             `;
         }).join('');
+
+        if (showingStart) showingStart.textContent = totalItems > 0 ? startIndex + 1 : 0;
+        if (showingEnd) showingEnd.textContent = endIndex;
+        if (totalData) totalData.textContent = totalItems;
+
+        if (prevBtn) prevBtn.disabled = historyPage === 1;
+        if (nextBtn) nextBtn.disabled = historyPage >= totalPages;
+
+        if (pageNumbers) {
+            let html = '';
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= historyPage - 1 && i <= historyPage + 1)) {
+                    html += `<button class="page-number ${i === historyPage ? 'active' : ''}" onclick="goToHistoryPage(${i})">${i}</button>`;
+                } else if (i === historyPage - 2 || i === historyPage + 2) {
+                    html += `<span class="ellipsis">...</span>`;
+                }
+            }
+            pageNumbers.innerHTML = html;
+        }
+    }
+}
+
+function toggleHistorySelection(id) {
+    if (selectedHistoryItems.has(id)) {
+        selectedHistoryItems.delete(id);
+    } else {
+        selectedHistoryItems.add(id);
+    }
+    updateHistorySelectedCount();
+}
+
+function toggleSelectAllHistory() {
+    const selectAllCheckbox = document.getElementById('selectAllHistoryCheckbox');
+    const checkboxes = document.querySelectorAll('.history-row-checkbox');
+
+    if (selectAllCheckbox.checked) {
+        const search = document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value.toLowerCase() : '';
+        const actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
+        const itemFilter = document.getElementById('historyItemFilter') ? document.getElementById('historyItemFilter').value : 'all';
+
+        const filtered = historyData.filter(h => {
+            if (actionFilter !== 'all' && h.action !== actionFilter) return false;
+            if (itemFilter !== 'all' && (!h.itemName || h.itemName.toLowerCase() !== itemFilter.toLowerCase())) return false;
+            if (search) {
+                const matchesSearch =
+                    (h.itemId && h.itemId.toLowerCase().includes(search)) ||
+                    (h.itemName && h.itemName.toLowerCase().includes(search)) ||
+                    (h.itemMerk && h.itemMerk.toLowerCase().includes(search)) ||
+                    (h.itemSn && h.itemSn.toLowerCase().includes(search)) ||
+                    (h.itemLokasi && h.itemLokasi.toLowerCase().includes(search)) ||
+                    (h.details && h.details.toLowerCase().includes(search));
+                if (!matchesSearch) return false;
+            }
+            return true;
+        });
+
+        filtered.forEach(h => selectedHistoryItems.add(h.id));
+    } else {
+        selectedHistoryItems.clear();
+    }
+
+    checkboxes.forEach(cb => {
+        cb.checked = selectAllCheckbox.checked;
+    });
+
+    updateHistorySelectedCount();
+}
+
+function updateHistorySelectedCount() {
+    const deleteSelectedBtn = document.getElementById('deleteHistorySelectedBtn');
+    const selectedCount = document.getElementById('historySelectedCount');
+
+    if (selectedHistoryItems.size > 0) {
+        deleteSelectedBtn.style.display = 'inline-flex';
+        selectedCount.textContent = selectedHistoryItems.size;
+    } else {
+        deleteSelectedBtn.style.display = 'none';
+    }
+}
+
+async function deleteSelectedHistory() {
+    if (selectedHistoryItems.size === 0) {
+        showToast('Pilih item yang ingin dihapus!', true);
+        return;
+    }
+
+    const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedHistoryItems.size} history?`);
+    if (!confirmDelete) return;
+
+    try {
+        console.log('Deleting history IDs:', Array.from(selectedHistoryItems));
+
+        const response = await fetch('/api/history/bulk-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ids: Array.from(selectedHistoryItems) })
+        });
+
+        console.log('Response status:', response.status);
+
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (data.success) {
+            historyData = historyData.filter(h => !selectedHistoryItems.has(h.id));
+            selectedHistoryItems.clear();
+            updateHistorySelectedCount();
+            renderHistoryTable();
+            showToast(`${data.count} history berhasil dihapus!`);
+        } else {
+            showToast('Gagal menghapus: ' + (data.message || 'Unknown error'), true);
+        }
+    } catch (error) {
+        console.error('Error deleting selected history:', error);
+        showToast('Gagal menghapus history! Error: ' + error.message, true);
     }
 }
 
 async function exportHistoryToExcel() {
-    if (historyData.length === 0) {
-        showToast('Tidak ada data history untuk diexport!', true);
-        return;
-    }
+    const btn = document.getElementById('exportHistoryExcelBtn');
+    if (btn && btn.disabled) return;
+    if (btn) btn.disabled = true;
 
-    const actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
-    const itemFilter = document.getElementById('historyItemFilter') ? document.getElementById('historyItemFilter').value : 'all';
+    try {
+        if (historyData.length === 0) {
+            showToast('Tidak ada data history untuk diexport!', true);
+            return;
+        }
 
-    let filtered = historyData.filter(h => {
-        if (actionFilter !== 'all' && h.action !== actionFilter) return false;
-        if (itemFilter !== 'all' && (!h.itemName || h.itemName.toLowerCase() !== itemFilter.toLowerCase())) return false;
-        return true;
-    });
+        const actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
+        const itemFilter = document.getElementById('historyItemFilter') ? document.getElementById('historyItemFilter').value : 'all';
 
-    if (filtered.length === 0) {
-        showToast('Tidak ada data untuk filter ini!', true);
-        return;
-    }
+        let filtered = historyData.filter(h => {
+            if (actionFilter !== 'all' && h.action !== actionFilter) return false;
+            if (itemFilter !== 'all' && (!h.itemName || h.itemName.toLowerCase() !== itemFilter.toLowerCase())) return false;
+            return true;
+        });
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('History');
+        if (filtered.length === 0) {
+            showToast('Tidak ada data untuk filter ini!', true);
+            return;
+        }
 
-    const headers = ['Aksi', 'ID Item', 'Nama Barang', 'Merk', 'SN', 'Lokasi', 'Detail', 'Waktu'];
-    const headerRow = worksheet.addRow(headers);
-    headerRow.eachCell((cell) => {
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF037A89' } };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    });
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('History');
 
-    worksheet.columns = [
-        { width: 12 }, { width: 12 }, { width: 20 }, { width: 15 },
-        { width: 20 }, { width: 20 }, { width: 35 }, { width: 22 }
-    ];
-
-    filtered.forEach(h => {
-        const actionLabel = h.action === 'CREATE' ? 'Input' : h.action === 'UPDATE' ? 'Update' : 'Delete';
-        const row = worksheet.addRow([
-            actionLabel, h.itemId || '-', h.itemName || '-', h.itemMerk || '-',
-            h.itemSn || '-', h.itemLokasi || '-', h.details || '-',
-            h.timestamp ? formatDateTime(h.timestamp) : '-'
-        ]);
-        row.eachCell((cell) => {
+        const headers = ['Aksi', 'ID Item', 'Nama Barang', 'Merk', 'SN', 'Lokasi', 'Detail', 'Waktu'];
+        const headerRow = worksheet.addRow(headers);
+        headerRow.eachCell((cell) => {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF037A89' } };
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
         });
-    });
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `History_${formatDate(new Date())}.xlsx`;
-    anchor.click();
-    window.URL.revokeObjectURL(url);
-    showToast('Berhasil export history ke Excel!');
+        worksheet.columns = [
+            { width: 12 }, { width: 12 }, { width: 20 }, { width: 15 },
+            { width: 20 }, { width: 20 }, { width: 35 }, { width: 22 }
+        ];
+
+        filtered.forEach(h => {
+            const actionLabel = h.action === 'CREATE' ? 'Input' : h.action === 'UPDATE' ? 'Update' : 'Delete';
+            const row = worksheet.addRow([
+                actionLabel, h.itemId || '-', h.itemName || '-', h.itemMerk || '-',
+                h.itemSn || '-', h.itemLokasi || '-', h.details || '-',
+                h.timestamp ? formatDateTime(h.timestamp) : '-'
+            ]);
+            row.eachCell((cell) => {
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            });
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'history_inventaris.xlsx';
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+        showToast('Berhasil export history ke Excel!');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 function exportHistoryToPdf() {
-    if (historyData.length === 0) {
-        showToast('Tidak ada data history untuk diexport!', true);
-        return;
+    var btn = document.getElementById('exportHistoryPdfBtn');
+    if (btn && btn.disabled) return;
+    if (btn) btn.disabled = true;
+
+    try {
+        if (!historyData || historyData.length === 0) {
+            showToast('Tidak ada data history untuk diexport!', true);
+            return;
+        }
+
+        var actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
+        var itemFilter = document.getElementById('historyItemFilter') ? document.getElementById('historyItemFilter').value : 'all';
+
+        var filtered = [];
+        for (var i = 0; i < historyData.length; i++) {
+            var h = historyData[i];
+            if (!h) continue;
+            if (actionFilter !== 'all' && h.action !== actionFilter) continue;
+            if (itemFilter !== 'all' && h.itemName && h.itemName.toLowerCase() !== itemFilter.toLowerCase()) continue;
+            filtered.push(h);
+        }
+
+        if (filtered.length === 0) {
+            showToast('Tidak ada data untuk filter ini!', true);
+            return;
+        }
+
+        var result = createPdfDoc('LAPORAN HISTORY INVENTARIS', 'landscape');
+        var doc = result.doc;
+
+        var tableData = [];
+        for (var j = 0; j < filtered.length; j++) {
+            var h = filtered[j];
+            var actionLabel = '-';
+            if (h.action === 'CREATE') actionLabel = 'Input';
+            else if (h.action === 'UPDATE') actionLabel = 'Update';
+            else if (h.action === 'DELETE') actionLabel = 'Delete';
+
+            tableData.push([
+                actionLabel,
+                h.itemId || '-',
+                h.itemName || '-',
+                h.itemMerk || '-',
+                h.itemSn || '-',
+                h.itemLokasi || '-',
+                h.details || '-',
+                h.timestamp ? formatDateTime(h.timestamp) : '-'
+            ]);
+        }
+
+        var tableOptions = applyPdfTableStyle(doc, {
+            head: [['Aksi', 'ID Item', 'Nama', 'Merk', 'SN', 'Lokasi', 'Detail', 'Waktu']],
+            body: tableData,
+            columnStyles: {
+                0: { cellWidth: 15, halign: 'center' },
+                1: { cellWidth: 20 },
+                2: { cellWidth: 30, halign: 'left' },
+                3: { cellWidth: 25 },
+                4: { cellWidth: 30 },
+                5: { cellWidth: 30, halign: 'left' },
+                6: { cellWidth: 'auto', halign: 'left' },
+                7: { cellWidth: 35 }
+            }
+        });
+
+        doc.autoTable(tableOptions);
+
+        doc.save('history_' + formatDate(new Date()) + '.pdf');
+        showToast('Berhasil export PDF!');
+
+    } catch (e) {
+        console.error('Export PDF Error:', e);
+        showToast('Gagal export PDF: ' + e.message, true);
+    } finally {
+        if (btn) btn.disabled = false;
     }
-
-    const actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
-    const itemFilter = document.getElementById('historyItemFilter') ? document.getElementById('historyItemFilter').value : 'all';
-
-    let filtered = historyData.filter(h => {
-        if (actionFilter !== 'all' && h.action !== actionFilter) return false;
-        if (itemFilter !== 'all' && (!h.itemName || h.itemName.toLowerCase() !== itemFilter.toLowerCase())) return false;
-        return true;
-    });
-
-    if (filtered.length === 0) {
-        showToast('Tidak ada data untuk filter ini!', true);
-        return;
-    }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('landscape');
-
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    const title = 'HISTORY INVENTARIS';
-    const titleWidth = doc.getTextWidth(title);
-    const pageWidth = doc.internal.pageSize.getWidth();
-    doc.text(title, (pageWidth - titleWidth) / 2, 22);
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const dateText = `Tanggal: ${formatDate(new Date())}`;
-    const dateWidth = doc.getTextWidth(dateText);
-    doc.text(dateText, (pageWidth - dateWidth) / 2, 30);
-
-    const tableData = filtered.map(h => {
-        const actionLabel = h.action === 'CREATE' ? 'Input' : h.action === 'UPDATE' ? 'Update' : 'Delete';
-        return [
-            actionLabel, h.itemId || '-', h.itemName || '-', h.itemMerk || '-',
-            h.itemSn || '-', h.itemLokasi || '-', h.details || '-',
-            h.timestamp ? formatDateTime(h.timestamp) : '-'
-        ];
-    });
-
-    doc.autoTable({
-        head: [['Aksi', 'ID Item', 'Nama', 'Merk', 'SN', 'Lokasi', 'Detail', 'Waktu']],
-        body: tableData,
-        startY: 38,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 3, overflow: 'wrap', halign: 'center', valign: 'middle' },
-        headStyles: { fillColor: [3, 122, 137], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-        bodyStyles: { halign: 'center' },
-        alternateRowStyles: { fillColor: [245, 250, 255] },
-        margin: 15
-    });
-
-    doc.save(`History_${formatDate(new Date())}.pdf`);
-    showToast('Berhasil export history ke PDF!');
 }
 
 // ========================================
@@ -1647,7 +2750,7 @@ let sortState = {};
 
 function initSortableColumns() {
     document.querySelectorAll('.sortable').forEach(th => {
-        th.addEventListener('click', function() {
+        th.addEventListener('click', function () {
             const table = this.closest('table');
             const tableId = table.id;
             const sortKey = this.dataset.sort;
@@ -1700,9 +2803,9 @@ function sortAndRenderInventory() {
     let filtered = inventoryData.filter(item => {
         if (filterValue !== 'all' && item.name !== filterValue) return false;
         const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
-                            (item.merk && item.merk.toLowerCase().includes(search)) ||
-                            (item.sn && item.sn.toLowerCase().includes(search)) ||
-                            (item.lokasi && item.lokasi.toLowerCase().includes(search));
+            (item.merk && item.merk.toLowerCase().includes(search)) ||
+            (item.sn && item.sn.toLowerCase().includes(search)) ||
+            (item.lokasi && item.lokasi.toLowerCase().includes(search));
         return matchesSearch;
     });
 
@@ -1716,37 +2819,52 @@ function sortAndRenderInventory() {
         emptyState.style.display = 'block';
     } else {
         emptyState.style.display = 'none';
-        tableBody.innerHTML = filtered.map(item => `
-            <tr>
-                <td>${item.name || '-'}</td>
+
+        // Use same rendering as updateInventoryTable
+        tableBody.innerHTML = filtered.map(item => {
+            const isSelected = selectedItems.has(item.id);
+            const kondisiBeforeClass = getStatusBadgeClass(item.kondisiBefore);
+            const kondisiAfterClass = getStatusBadgeClass(item.kondisiAfter);
+            const checklistClass = item.checklist === 'Ya' ? 'checked' : 'unchecked';
+            const categoryClass = getCategoryBadgeClass(item.name);
+
+            return `
+            <tr data-id="${item.id}">
+                <td><input type="checkbox" class="row-checkbox" ${isSelected ? 'checked' : ''}></td>
+                <td><span class="category-badge ${categoryClass}">${item.name || '-'}</span></td>
                 <td>${item.merk || '-'}</td>
-                <td>${item.sn || '-'}</td>
+                <td><span class="barcode-value">${item.sn || '-'}</span></td>
+                <td><span class="barcode-value">${item.snConverter || '-'}</span></td>
                 <td>${item.lokasi || '-'}</td>
-                <td>${item.kondisiBefore || '-'}</td>
-                <td>${item.checklist || '-'}</td>
-                <td>${item.kondisiAfter || '-'}</td>
+                <td><span class="status-badge ${kondisiBeforeClass}">${item.kondisiBefore || '-'}</span></td>
+                <td><span class="status-badge ${kondisiAfterClass}">${item.kondisiAfter || '-'}</span></td>
+                <td><span class="status-badge ${checklistClass}">${item.checklist || '-'}</span></td>
                 <td>${item.catatan || '-'}</td>
                 <td>${item.tanggalMasuk || '-'}</td>
                 <td>${item.date || '-'}</td>
                 <td>
-                    <img src="${item.qrCode || ''}" alt="QR" class="qr-thumbnail" onclick="viewItem('${item.id}')" style="display: ${item.qrCode ? 'block' : 'none'}">
+                    ${item.qrCode
+                    ? `<img src="${item.qrCode}" alt="QR" class="qr-thumbnail">`
+                    : `<span class="no-data">-</span>`
+                }
                 </td>
-                <td><span class="barcode-display">${item.id || '-'}</span></td>
+                <td><span class="barcode-value">${item.barcode || item.id || '-'}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn view" onclick="viewItem('${item.id}')" title="Lihat">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="action-btn edit" onclick="editItem('${item.id}')" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="action-btn delete" onclick="deleteItem('${item.id}')" title="Hapus">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <button class="action-btn view" onclick="viewItem('${item.id}')" title="Lihat"><i class="fas fa-eye"></i></button>
+                        <button class="action-btn edit" onclick="editItem('${item.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="action-btn delete" onclick="deleteItem('${item.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
             </tr>
-        `).join('');
+            `;
+        }).join('');
+
+        // Re-attach checkbox listeners after sorting
+        attachCheckboxListeners();
+
+        // Attach action button listeners
+        attachActionButtonListeners();
     }
 }
 
@@ -1762,11 +2880,16 @@ function sortAndRenderScan() {
         filteredData = inventoryData.filter(item => item.name === filterValue);
     }
 
-    // Add sort-friendly properties
+    // Add sort-friendly properties (status: 1 = checked/sudah, 0 = unchecked/belum)
     let sortableData = filteredData.map(item => {
         const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
         const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
-        return { ...item, status: isChecked ? 'checked' : 'unchecked', checkTime: checkTime || '' };
+        return {
+            ...item,
+            status: isChecked ? 1 : 0,  // 1 = sudah dicek, 0 = belum dicek (untuk sorting)
+            statusText: isChecked ? 'Sudah Dicek' : 'Belum Dicek',  // Text untuk display
+            checkTime: checkTime || ''
+        };
     });
 
     sortableData = sortData(sortableData, state.key, state.dir);
@@ -1775,18 +2898,19 @@ function sortAndRenderScan() {
     if (!tableBody) return;
 
     tableBody.innerHTML = sortableData.map(item => {
-        const isChecked = item.status === 'checked';
+        const isChecked = item.status === 1;
         const rowClass = isChecked ? 'scan-item-checked' : '';
-        const statusIcon = isChecked ? '<i class="fas fa-check-circle" style="color: #28a745;"></i>' : '<i class="fas fa-circle" style="color: #dc3545;"></i>';
-        const statusText = isChecked ? 'Sudah Dicek' : 'Belum Dicek';
+        const statusBadge = isChecked
+            ? '<span class="status-badge checked">Sudah Dicek</span>'
+            : '<span class="status-badge unchecked">Belum Dicek</span>';
 
         return `
             <tr class="${rowClass}" data-id="${item.id}">
-                <td>${statusIcon}</td>
-                <td>${item.id || '-'}</td>
-                <td>${item.name || '-'}</td>
+                <td>${statusBadge}</td>
+                <td><span class="barcode-display">${item.id || '-'}</span></td>
+                <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
                 <td>${item.merk || '-'}</td>
-                <td>${item.sn || '-'}</td>
+                <td><span class="barcode-display">${item.sn || '-'}</span></td>
                 <td>${item.lokasi || '-'}</td>
                 <td>${item.checkTime ? formatDateTime(item.checkTime) : '-'}</td>
             </tr>
@@ -1829,7 +2953,7 @@ function sortAndRenderHistory() {
             const actionClass = h.action.toLowerCase();
             const actionLabel = h.action === 'CREATE' ? 'Input' : h.action === 'UPDATE' ? 'Update' : 'Delete';
             return `
-                <tr>
+                <tr style="animation: fadeSlideIn 0.5s ease forwards; opacity: 0;">
                     <td><span class="history-action-badge ${actionClass}">${actionLabel}</span></td>
                     <td>${h.itemId || '-'}</td>
                     <td>${h.itemName || '-'}</td>
@@ -1868,29 +2992,58 @@ async function handleImportFile(event) {
 
         // Map Excel columns to inventory fields
         const items = data.map((row, index) => {
-            // Handle various column name formats
-            const name = row['Nama Barang'] || row['name'] || row['Name'] || row['NAMA BARANG'] || '';
-            const merk = row['Merk'] || row['merk'] || row['MERK'] || '';
-            const sn = row['SN'] || row['sn'] || row['SN'] || row['Serial Number'] || '';
-            const lokasi = row['Lokasi'] || row['lokasi'] || row['LOKASI'] || '';
-            const kondisiBefore = row['Kondisi (Before)'] || row['kondisiBefore'] || row['Kondisi Before'] || 'Baik';
-            const checklist = row['Checklist'] || row['checklist'] || row['CHECKLIST'] || 'Tidak';
-            const kondisiAfter = row['Kondisi (After)'] || row['kondisiAfter'] || row['Kondisi After'] || '';
-            const catatan = row['Catatan'] || row['catatan'] || row['CATATAN'] || '';
-            const date = row['Tanggal'] || row['date'] || row['Tanggal'] || new Date().toISOString().split('T')[0];
+            // Debug: log first row keys to see actual column names
+            if (index === 0) {
+                console.log('First row keys:', Object.keys(row));
+                console.log('First row sample:', row);
+            }
+
+            // Get value with more flexible matching
+            const getValue = (possibleNames) => {
+                for (const name of possibleNames) {
+                    // Direct match
+                    if (row[name] !== undefined && row[name] !== null) {
+                        return row[name];
+                    }
+                    // Case insensitive match
+                    const nameLower = name.toLowerCase().trim();
+                    for (const key of Object.keys(row)) {
+                        if (key.toLowerCase().trim() === nameLower) {
+                            return row[key];
+                        }
+                    }
+                }
+                return '';
+            };
+
+            const name = getValue(['Nama Barang', 'name', 'Name', 'NAMA BARANG']);
+            const id = getValue(['ID', 'id', 'ID', 'Barcode', 'barcode']);
+            const merk = getValue(['Merk', 'merk', 'MERK']);
+            const sn = getValue(['SN', 'sn', 'Serial Number', 'SERIAL NUMBER']);
+            const snConverter = getValue(['SN Converter', 'snConverter', 'sn_converter', 'SN CONVERTER', 'Sn Converter', 'Sn converter']);
+            const lokasi = getValue(['Lokasi', 'lokasi', 'LOKASI']);
+            const kondisiBefore = getValue(['Kondisi (Before)', 'kondisiBefore', 'Kondisi Before', 'KONDISI BEFORE']) || 'Baik';
+            const kondisiAfter = getValue(['Kondisi (After)', 'kondisiAfter', 'Kondisi After', 'KONDISI AFTER']);
+            const checklist = getValue(['Checklist', 'checklist', 'CHECKLIST']) || 'Tidak';
+            const catatan = getValue(['Catatan', 'catatan', 'CATATAN']);
+            const date = getValue(['Tanggal', 'date', 'TANGGAL']) || new Date().toISOString().split('T')[0];
+            const qrData = getValue(['QR Code', 'qrCode', 'QR Data', 'qrData', 'QR']);
 
             if (!name) return null;
 
             return {
+                id: String(id || ''),
                 name: String(name),
                 merk: String(merk || ''),
                 sn: String(sn || ''),
+                snConverter: String(snConverter || ''),
                 lokasi: String(lokasi || ''),
                 kondisiBefore: String(kondisiBefore),
-                checklist: String(checklist),
                 kondisiAfter: String(kondisiAfter || ''),
+                checklist: String(checklist),
                 catatan: String(catatan || ''),
-                date: date
+                date: date,
+                qrData: String(qrData || '')
             };
         }).filter(item => item !== null);
 
@@ -1910,6 +3063,14 @@ async function handleImportFile(event) {
 
         if (result.success) {
             showToast(`Berhasil import ${result.count} item!`);
+
+            // Regenerate QR codes for imported items if they don't have QR codes
+            if (items.some(item => item.qrData || item.sn)) {
+                setTimeout(() => {
+                    regenerateQRCodes();
+                }, 1000);
+            }
+
             loadInventory();
         } else {
             showToast('Gagal import: ' + (result.message || 'Unknown error'), true);
@@ -1919,14 +3080,76 @@ async function handleImportFile(event) {
         showToast('Error saat memproses file: ' + error.message, true);
     }
 
-    // Reset file input
     event.target.value = '';
+}
+
+// Regenerate QR codes for items without QR codes
+function regenerateQRCodes() {
+    let count = 0;
+
+    inventoryData.forEach(item => {
+        if (!item.qrCode && (item.sn || item.id)) {
+            const qrData = item.sn || item.id;
+
+            const qrContainer = document.createElement('div');
+            qrContainer.style.display = 'none';
+            document.body.appendChild(qrContainer);
+
+            try {
+                new QRCode(qrContainer, {
+                    text: qrData,
+                    width: 128,
+                    height: 128,
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+
+                setTimeout(() => {
+                    const canvas = qrContainer.querySelector('canvas');
+                    const img = qrContainer.querySelector('img');
+
+                    let qrBase64 = '';
+                    if (canvas) {
+                        qrBase64 = canvas.toDataURL('image/png');
+                    } else if (img) {
+                        qrBase64 = img.src;
+                    }
+
+                    if (qrBase64) {
+                        fetch(`/api/inventory/${item.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ qrCode: qrBase64 })
+                        })
+                            .then(res => res.json())
+                            .then(result => {
+                                if (result.success) {
+                                    count++;
+                                    item.qrCode = qrBase64;
+                                    updateInventoryTable();
+                                }
+                            });
+                    }
+
+                    document.body.removeChild(qrContainer);
+                }, 100);
+            } catch (e) {
+                console.error('Error generating QR:', e);
+                document.body.removeChild(qrContainer);
+            }
+        }
+    });
+
+    setTimeout(() => {
+        if (count > 0) {
+            showToast(`${count} QR Code berhasil diregenerate!`);
+        }
+    }, 2000);
 }
 
 function readExcelFile(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = function (e) {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
@@ -1941,4 +3164,1001 @@ function readExcelFile(file) {
         reader.onerror = reject;
         reader.readAsArrayBuffer(file);
     });
+}
+
+// ========================================
+// HANDOVER FUNCTIONS
+// ========================================
+let handoverData = [];
+let selectedHandoverItems = new Set();
+
+async function loadHandover() {
+    try {
+        const response = await fetch('/api/handover');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        handoverData = Array.isArray(data) ? data : [];
+
+        renderHandoverTable();
+    } catch (error) {
+        console.error('Error loading handover:', error);
+        handoverData = [];
+        renderHandoverTable();
+    }
+}
+
+function loadItemsByCategory() {
+    const kategoriSelect = document.getElementById('handoverKategori');
+    const itemSelect = document.getElementById('handoverItem');
+    if (!kategoriSelect || !itemSelect) return;
+
+    const kategori = kategoriSelect.value;
+
+    if (!kategori) {
+        itemSelect.innerHTML = '<option value="">Pilih Kategori Dulu</option>';
+        itemSelect.disabled = true;
+        return;
+    }
+
+    itemSelect.disabled = false;
+    itemSelect.innerHTML = '<option value="">Pilih Item</option>';
+
+    const filteredItems = inventoryData.filter(item => item.name === kategori);
+
+    filteredItems.forEach(item => {
+        itemSelect.innerHTML += `<option value="${item.id}" data-name="${item.name}" data-merk="${item.merk}" data-sn="${item.sn}" data-lokasi="${item.lokasi}">${item.id} - ${item.name} (${item.merk || '-'})</option>`;
+    });
+}
+
+function loadHandoverItemDetails() {
+    const select = document.getElementById('handoverItem');
+    if (!select) return;
+
+    const itemId = select.value;
+    const detailId = document.getElementById('detailId');
+    const detailNama = document.getElementById('detailNama');
+    const detailMerk = document.getElementById('detailMerk');
+    const detailSn = document.getElementById('detailSn');
+    const detailLokasi = document.getElementById('detailLokasi');
+    const detailKondisi = document.getElementById('detailKondisi');
+
+    if (!itemId) {
+        if (detailId) detailId.textContent = '-';
+        if (detailNama) detailNama.textContent = '-';
+        if (detailMerk) detailMerk.textContent = '-';
+        if (detailSn) detailSn.textContent = '-';
+        if (detailLokasi) detailLokasi.textContent = '-';
+        if (detailKondisi) detailKondisi.textContent = '-';
+        return;
+    }
+
+        const item = inventoryData.find(i => i.id === itemId);
+    const detailSnConverterContainer = document.getElementById('detailSnConverterContainer');
+    const detailSnConverter = document.getElementById('detailSnConverter');
+
+    if (item) {
+        if (detailId) detailId.textContent = item.id;
+        if (detailNama) detailNama.textContent = item.name || '-';
+        if (detailMerk) detailMerk.textContent = item.merk || '-';
+        if (detailSn) detailSn.textContent = item.sn || '-';
+        if (detailLokasi) detailLokasi.textContent = item.lokasi || '-';
+        if (detailKondisi) detailKondisi.textContent = item.kondisiAfter || item.kondisiBefore || '-';
+
+        // Handle SN Converter visibility for Headset category
+        if (item.name && item.name.toLowerCase() === 'headset') {
+            if (detailSnConverterContainer) detailSnConverterContainer.style.display = 'block';
+            if (detailSnConverter) detailSnConverter.textContent = item.snConverter || '-';
+        } else {
+            if (detailSnConverterContainer) detailSnConverterContainer.style.display = 'none';
+        }
+    } else {
+        if (detailSnConverterContainer) detailSnConverterContainer.style.display = 'none';
+    }
+}
+
+async function submitHandover(e) {
+    e.preventDefault();
+
+    const select = document.getElementById('handoverItem');
+    const itemId = select.value;
+    const item = inventoryData.find(i => i.id === itemId);
+
+    const handoverRecord = {
+        jenis: document.getElementById('handoverJenis').value,
+        itemId: itemId,
+        itemName: item ? item.name : '',
+        itemMerk: item ? item.merk : '',
+        itemSn: item ? item.sn : '',
+        pihakPenyerah: document.getElementById('handoverDari').value,
+        pihakPenerima: document.getElementById('handoverKepada').value,
+        tanggalSerahTerima: document.getElementById('handoverTanggal').value,
+        kondisiBefore: document.getElementById('handoverKondisiBefore').value,
+        kondisiAfter: document.getElementById('handoverKondisiAfter').value,
+        lokasiBaru: document.getElementById('handoverLokasi').value,
+        catatan: document.getElementById('handoverCatatan').value,
+        noBeritaAcara: document.getElementById('handoverNoBA').value
+    };
+
+    try {
+        const response = await fetch('/api/handover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(handoverRecord)
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast('Serah terima berhasil disimpan!');
+            document.getElementById('handoverForm').reset();
+            loadHandover();
+        } else {
+            showToast('Gagal menyimpan serah terima!', true);
+        }
+    } catch (error) {
+        console.error('Error saving handover:', error);
+        showToast('Gagal menyimpan serah terima!', true);
+    }
+}
+
+// HANDOVER PAGINATION
+let handoverPage = 1;
+let handoverItemsPerPage = 10;
+let handoverSortKey = '';
+let handoverSortDir = 'asc';
+
+function changeHandoverPage(direction) {
+    const limitSelect = document.getElementById('handoverViewLimit');
+    if (limitSelect) handoverItemsPerPage = parseInt(limitSelect.value);
+
+    handoverPage += direction;
+
+    const totalPages = Math.ceil(filteredHandoverData().length / handoverItemsPerPage);
+    if (handoverPage < 1) handoverPage = 1;
+    if (handoverPage > totalPages) handoverPage = totalPages;
+
+    renderHandoverTable();
+}
+
+function goToHandoverPage(page) {
+    handoverPage = page;
+    renderHandoverTable();
+}
+
+function sortHandoverTable(key) {
+    if (handoverSortKey === key) {
+        handoverSortDir = handoverSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        handoverSortKey = key;
+        handoverSortDir = 'asc';
+    }
+    renderHandoverTable();
+}
+
+function filteredHandoverData() {
+    if (!handoverData || !Array.isArray(handoverData)) {
+        return [];
+    }
+
+    const search = document.getElementById('handoverSearchInput') ? document.getElementById('handoverSearchInput').value.toLowerCase() : '';
+    const jenisFilter = document.getElementById('handoverJenisFilter') ? document.getElementById('handoverJenisFilter').value : 'all';
+
+    var filtered = handoverData.filter(function (h) {
+        if (!h) return false;
+        if (jenisFilter !== 'all' && h.jenis !== jenisFilter) return false;
+        if (search) {
+            var matchesSearch =
+                (h.item_id && h.item_id.toLowerCase().includes(search)) ||
+                (h.item_name && h.item_name.toLowerCase().includes(search)) ||
+                (h.pihak_penyerah && h.pihak_penyerah.toLowerCase().includes(search)) ||
+                (h.pihak_penerima && h.pihak_penerima.toLowerCase().includes(search)) ||
+                (h.no_berita_acara && h.no_berita_acara.toLowerCase().includes(search));
+            if (!matchesSearch) return false;
+        }
+        return true;
+    });
+
+    // Apply sorting
+    if (handoverSortKey) {
+        filtered.sort(function (a, b) {
+            var valA = a[handoverSortKey] || '';
+            var valB = b[handoverSortKey] || '';
+
+            // Handle date sorting
+            if (handoverSortKey === 'tanggal_serah_terima' || handoverSortKey === 'timestamp') {
+                valA = valA ? new Date(valA).getTime() : 0;
+                valB = valB ? new Date(valB).getTime() : 0;
+            }
+
+            if (valA < valB) return handoverSortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return handoverSortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    return filtered;
+}
+
+function renderHandoverTable() {
+    const tableBody = document.getElementById('handoverTableBody');
+    const emptyState = document.getElementById('handoverEmptyState');
+    const pagination = document.getElementById('handoverPagination');
+    if (!tableBody) return;
+
+    const selectAllCheckbox = document.getElementById('selectAllHandoverCheckbox');
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+
+    const limitSelect = document.getElementById('handoverViewLimit');
+    if (limitSelect) handoverItemsPerPage = parseInt(limitSelect.value);
+
+    const filtered = filteredHandoverData();
+    const totalItems = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / handoverItemsPerPage));
+
+    if (handoverPage > totalPages) handoverPage = totalPages;
+    if (handoverPage < 1) handoverPage = 1;
+
+    const startIndex = (handoverPage - 1) * handoverItemsPerPage;
+    const endIndex = Math.min(startIndex + handoverItemsPerPage, totalItems);
+    const paginatedData = totalItems > 0 ? filtered.slice(startIndex, endIndex) : [];
+
+    const showingStart = document.getElementById('handoverShowingStart');
+    const showingEnd = document.getElementById('handoverShowingEnd');
+    const totalData = document.getElementById('handoverTotalData');
+    const prevBtn = document.getElementById('handoverPrevBtn');
+    const nextBtn = document.getElementById('handoverNextBtn');
+    const pageNumbers = document.getElementById('handoverPageNumbers');
+
+    if (totalItems === 0) {
+        tableBody.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+        if (pagination) pagination.style.display = 'none';
+    } else {
+        if (emptyState) emptyState.style.display = 'none';
+        if (pagination) pagination.style.display = 'flex';
+
+        tableBody.innerHTML = paginatedData.map(h => {
+            const warna = h.jenis === 'Penerimaan' ? '#10b981' : '#f59e0b';
+            return `
+                <tr data-id="${h.id}">
+                    <td><input type="checkbox" class="handover-row-checkbox" value="${h.id}" onchange="toggleHandoverSelection('${h.id}')"></td>
+                    <td><span style="color: ${warna}; font-weight: bold;">${h.jenis}</span></td>
+                    <td>${h.no_berita_acara || '-'}</td>
+                    <td>${h.item_id || '-'}</td>
+                    <td>${h.item_name || '-'}</td>
+                    <td>${h.pihak_penyerah || '-'}</td>
+                    <td>${h.pihak_penerima || '-'}</td>
+                    <td>${formatTanggalIndonesia(h.tanggal_serah_terima) || '-'}</td>
+                    <td>${h.kondisi_before || '-'}</td>
+                    <td>${h.kondisi_after || '-'}</td>
+                    <td>${h.lokasi_baru || '-'}</td>
+                    <td>${h.catatan || '-'}</td>
+                    <td>${h.timestamp ? formatTanggalIndonesia(h.timestamp, true) : '-'}</td>
+                    <td>
+                        <div class="btn-aksi">
+                            <button class="btn-pdf" onclick="generateBA_pdf('${h.id}')" title="Download BA PDF"><i class="fas fa-file-pdf"></i></button>
+                            <button class="btn-excel" onclick="generateBA_excel('${h.id}')" title="Download BA Excel"><i class="fas fa-file-excel"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        if (showingStart) showingStart.textContent = totalItems > 0 ? startIndex + 1 : 0;
+        if (showingEnd) showingEnd.textContent = endIndex;
+        if (totalData) totalData.textContent = totalItems;
+
+        if (prevBtn) prevBtn.disabled = handoverPage === 1;
+        if (nextBtn) nextBtn.disabled = handoverPage >= totalPages;
+
+        if (pageNumbers) {
+            let html = '';
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= handoverPage - 1 && i <= handoverPage + 1)) {
+                    html += `<button class="page-number ${i === handoverPage ? 'active' : ''}" onclick="goToHandoverPage(${i})">${i}</button>`;
+                } else if (i === handoverPage - 2 || i === handoverPage + 2) {
+                    html += `<span class="ellipsis">...</span>`;
+                }
+            }
+            pageNumbers.innerHTML = html;
+        }
+    }
+}
+
+function updateHandoverTable() {
+    handoverPage = 1;
+    renderHandoverTable();
+}
+
+function toggleHandoverSelection(id) {
+    if (selectedHandoverItems.has(id)) {
+        selectedHandoverItems.delete(id);
+    } else {
+        selectedHandoverItems.add(id);
+    }
+    updateHandoverSelectedCount();
+}
+
+function toggleSelectAllHandover() {
+    const selectAllCheckbox = document.getElementById('selectAllHandoverCheckbox');
+    const checkboxes = document.querySelectorAll('.handover-row-checkbox');
+
+    if (!selectAllCheckbox) return;
+
+    if (selectAllCheckbox.checked) {
+        filteredHandoverData().forEach(h => selectedHandoverItems.add(h.id));
+    } else {
+        selectedHandoverItems.clear();
+    }
+
+    checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+    updateHandoverSelectedCount();
+}
+
+function updateHandoverSelectedCount() {
+    const deleteSelectedBtn = document.getElementById('deleteHandoverSelectedBtn');
+    const selectedCount = document.getElementById('handoverSelectedCount');
+
+    if (selectedHandoverItems.size > 0) {
+        if (deleteSelectedBtn) deleteSelectedBtn.style.display = 'inline-flex';
+        if (selectedCount) selectedCount.textContent = selectedHandoverItems.size;
+    } else {
+        if (deleteSelectedBtn) deleteSelectedBtn.style.display = 'none';
+    }
+}
+
+async function deleteSelectedHandover() {
+    if (selectedHandoverItems.size === 0) {
+        showToast('Pilih item yang ingin dihapus!', true);
+        return;
+    }
+
+    const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedHandoverItems.size} data?`);
+    if (!confirmDelete) return;
+
+    try {
+        const response = await fetch('/api/handover/bulk-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: Array.from(selectedHandoverItems) })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            handoverData = handoverData.filter(h => !selectedHandoverItems.has(h.id));
+            selectedHandoverItems.clear();
+            updateHandoverSelectedCount();
+            renderHandoverTable();
+            showToast(`${data.count} data berhasil dihapus!`);
+        }
+    } catch (error) {
+        console.error('Error deleting handover:', error);
+        showToast('Gagal menghapus!', true);
+    }
+}
+
+function formatTanggalIndonesia(dateStr) {
+    if (!dateStr) return '-';
+    const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const parts = dateStr.split('-');
+    if (parts.length >= 3) {
+        const tahun = parts[0];
+        const bulanIdx = parseInt(parts[1]) - 1;
+        const hari = parts[2].split('T')[0];
+        return `${hari} ${bulan[bulanIdx]} ${tahun}`;
+    }
+    return dateStr;
+}
+
+function generateNomorBA(tanggal, id) {
+    if (!tanggal) return 'SMG08.001/ICONNET/BASTB/04-12-2026/0';
+
+    const tgl = tanggal.includes('T') ? tanggal.split('T')[0] : tanggal;
+    const parts = tgl.split('-');
+    const tahun = parts[0];
+    const bulan = parts[1];
+    const hari = parts[2];
+    const nomor = String(id).padStart(3, '0');
+
+    return `SMG08.${nomor}/ICONNET/BASTB/${bulan}-${hari}-${tahun}/0`;
+}
+
+function generateBA_pdf(id) {
+    const data = handoverData.find(h => h.id == id);
+    if (!data) {
+        showToast('Data tidak ditemukan!', true);
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const centerX = pageWidth / 2;
+    const margin = 20;
+    const marginRight = pageWidth - margin;
+    const tableWidth = pageWidth - (margin * 2);
+
+    const nomorBA = data.no_berita_acara || generateNomorBA(data.tanggal_serah_terima, data.id);
+    const tglFormat = formatTanggalIndonesia(data.tanggal_serah_terima);
+
+    // 1. HEADER: Logo & Nomor Dokumen
+    try {
+        doc.addImage('img/logo1.png', 'PNG', margin, 10, 35, 12);
+    } catch (e) {
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(79, 70, 229);
+        doc.text('ICONNET', margin, 18);
+    }
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(79, 70, 229);
+    doc.text('No. Berita Acara:', marginRight, 15, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 41, 59);
+    doc.text(nomorBA, marginRight, 20, { align: 'right' });
+
+    // 2. JUDUL
+    let y = 40;
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('BERITA ACARA SERAH TERIMA BARANG', centerX, y, { align: 'center' });
+
+    y += 5;
+    doc.setDrawColor(79, 70, 229);
+    doc.setLineWidth(0.8);
+    doc.line(margin, y, marginRight, y);
+
+    // 3. KALIMAT PEMBUKA
+    y += 15;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(51, 65, 85);
+
+    const openingText = `Bahwa pada hari ini, ${tglFormat}, kami yang bertanda tangan di bawah ini telah melaksanakan serah terima aset/barang inventaris dengan rincian informasi sebagai berikut:`;
+    const splitOpening = doc.splitTextToSize(openingText, tableWidth);
+    doc.text(splitOpening, margin, y);
+
+    // 4. TABEL DETAIL BARANG
+    y += (splitOpening.length * 5) + 5;
+    doc.autoTable({
+        startY: y,
+        head: [['Deskripsi Informasi', 'Detail Aset / Barang']],
+        body: [
+            ['ID Inventaris', data.item_id || '-'],
+            ['Nama Barang', data.item_name || '-'],
+            ['Merk / Model', data.item_merk || '-'],
+            ['Serial Number (SN)', data.item_sn || '-'],
+            ['Kategori / Jenis', data.jenis || '-'],
+            ['Kondisi Awal (Penyerah)', data.kondisi_before || '-'],
+            ['Kondisi Akhir (Penerima)', data.kondisi_after || '-'],
+            ['Lokasi Penempatan', data.lokasi_baru || '-']
+        ],
+        margin: { left: margin, right: margin },
+        theme: 'grid',
+        headStyles: {
+            fillColor: [30, 41, 59],
+            textColor: 255,
+            fontStyle: 'bold',
+            fontSize: 10,
+            halign: 'left',
+            cellPadding: 4
+        },
+        bodyStyles: {
+            fontSize: 9.5,
+            textColor: [51, 65, 85],
+            cellPadding: 4,
+            lineColor: [226, 232, 240]
+        },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: tableWidth * 0.35, fillColor: [248, 250, 252] },
+            1: { cellWidth: tableWidth * 0.65 }
+        },
+        styles: {
+            valign: 'middle',
+            overflow: 'linebreak'
+        }
+    });
+
+    // 5. TANDA TANGAN
+    y = doc.lastAutoTable.finalY + 20;
+
+    // Check if y is too low, add page if necessary
+    if (y > pageHeight - 60) {
+        doc.addPage();
+        y = 20;
+    }
+
+    const colWidth = tableWidth / 2;
+    const col1X = margin + (colWidth / 2);
+    const col2X = marginRight - (colWidth / 2);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+
+    doc.text('Pihak Penyerah,', col1X, y, { align: 'center' });
+    doc.text('Pihak Penerima,', col2X, y, { align: 'center' });
+
+    y += 25; // Space for signature
+
+    // Names with Underline
+    doc.setFont('helvetica', 'bold');
+
+    const namePenyerah = data.pihak_penyerah || '............................';
+    const namePenerima = data.pihak_penerima || '............................';
+
+    doc.text(namePenyerah, col1X, y, { align: 'center' });
+    doc.text(namePenerima, col2X, y, { align: 'center' });
+
+    // Drawing Underline
+    const nameWidth1 = doc.getTextWidth(namePenyerah);
+    const nameWidth2 = doc.getTextWidth(namePenerima);
+
+    doc.setLineWidth(0.3);
+    doc.setDrawColor(30, 41, 59);
+    doc.line(col1X - (nameWidth1 / 2), y + 1, col1X + (nameWidth1 / 2), y + 1);
+    doc.line(col2X - (nameWidth2 / 2), y + 1, col2X + (nameWidth2 / 2), y + 1);
+
+    // Mengetahui
+    y += 15;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Mengetahui / Menyetujui,', centerX, y, { align: 'center' });
+
+    y += 25;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(79, 70, 229);
+    doc.text('...................................', centerX, y, { align: 'center' });
+
+    const mgmtWidth = doc.getTextWidth('...................................');
+    doc.setDrawColor(79, 70, 229);
+    doc.line(centerX - (mgmtWidth / 2), y + 1, centerX + (mgmtWidth / 2), y + 1);
+
+    // 6. CATATAN (IF ANY)
+    if (data.catatan) {
+        y += 15;
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'italic');
+        const catatanLines = doc.splitTextToSize('Catatan: ' + data.catatan, tableWidth);
+        doc.text(catatanLines, margin, y);
+    }
+
+    // 7. FOOTER: Page Number & Date
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`Halaman ${i} dari ${totalPages}`, centerX, pageHeight - 10, { align: 'center' });
+        doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, margin, pageHeight - 10);
+    }
+
+    const fileName = `BA_SERAH_TERIMA_${data.item_id || 'ITEM'}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+    showToast('Berita Acara PDF berhasil diunduh!');
+}
+
+async function generateBA_excel(id) {
+    const data = handoverData.find(h => h.id == id);
+    if (!data) {
+        showToast('Data tidak ditemukan!', true);
+        return;
+    }
+    
+    showToast('Sedang menyiapkan file Excel...');
+    
+    try {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('BA Serah Terima');
+        
+        const tglFormat = formatTanggalIndonesia(data.tanggal_serah_terima);
+        const nomorBA = data.no_berita_acara || generateNomorBA(data.tanggal_serah_terima, data.id);
+
+        // Set columns
+        worksheet.columns = [
+            { width: 35 }, // A: Keterangan
+            { width: 55 }  // B: Detail
+        ];
+
+        // 1. HEADER SECTION
+        // Add Logo if possible
+        try {
+            const logoResponse = await fetch('img/logo1.png');
+            if (logoResponse.ok) {
+                const logoBuffer = await logoResponse.arrayBuffer();
+                const logoId = workbook.addImage({
+                    buffer: logoBuffer,
+                    extension: 'png',
+                });
+                // Place logo in top right
+                worksheet.addImage(logoId, {
+                    tl: { col: 1.6, row: 0.1 },
+                    ext: { width: 100, height: 35 }
+                });
+            }
+        } catch (e) {
+            console.warn('Failed to load logo for Excel:', e);
+        }
+
+        // Title
+        worksheet.mergeCells('A1:B1');
+        const titleCell = worksheet.getCell('A1');
+        titleCell.value = 'BERITA ACARA SERAH TERIMA BARANG';
+        titleCell.font = { name: 'Arial', bold: true, size: 16, color: { argb: 'FF1E293B' } };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(1).height = 30;
+
+        worksheet.mergeCells('A2:B2');
+        const companyCell = worksheet.getCell('A2');
+        companyCell.value = 'ICONNET';
+        companyCell.font = { name: 'Arial', bold: true, size: 14, color: { argb: 'FF4F46E5' } };
+        companyCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(2).height = 25;
+
+        worksheet.mergeCells('A3:B3');
+        const noCell = worksheet.getCell('A3');
+        noCell.value = 'No: ' + nomorBA;
+        noCell.font = { name: 'Arial', size: 10 };
+        noCell.alignment = { horizontal: 'center' };
+
+        // 2. OPENING SECTION
+        worksheet.addRow([]);
+        const openingRow = worksheet.addRow(['Pada hari ini, tanggal ' + tglFormat + ', telah dilakukan serah terima barang sebagai berikut:']);
+        worksheet.mergeCells(`A${openingRow.number}:B${openingRow.number}`);
+        openingRow.getCell(1).font = { name: 'Arial', size: 11 };
+        openingRow.getCell(1).alignment = { wrapText: true, vertical: 'middle' };
+        openingRow.height = 30;
+
+        worksheet.addRow([]);
+
+        // 3. DATA TABLE
+        const headRow = worksheet.addRow(['Keterangan', 'Detail']);
+        headRow.height = 25;
+        headRow.eachCell(cell => {
+            cell.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = {
+                top: { style: 'medium' },
+                left: { style: 'medium' },
+                bottom: { style: 'medium' },
+                right: { style: 'medium' }
+            };
+        });
+
+        const rows = [
+            ['ID Inventaris', data.item_id || '-'],
+            ['Nama Barang', data.item_name || '-'],
+            ['Merk / Model', data.item_merk || '-'],
+            ['Serial Number (SN)', data.item_sn || '-'],
+            ['Kategori / Jenis', data.jenis || '-'],
+            ['Kondisi Awal (Penyerah)', data.kondisi_before || '-'],
+            ['Kondisi Akhir (Penerima)', data.kondisi_after || '-'],
+            ['Lokasi Penempatan Baru', data.lokasi_baru || '-']
+        ];
+
+        rows.forEach(r => {
+            const row = worksheet.addRow(r);
+            row.height = 22;
+            row.getCell(1).font = { name: 'Arial', bold: true, color: { argb: 'FF334155' } };
+            row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+            row.eachCell(cell => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+                cell.alignment = { vertical: 'middle', indent: 1 };
+            });
+        });
+
+        worksheet.addRow([]);
+
+        // 4. SIGNATURE SECTION
+        worksheet.addRow([]);
+        const sigHeader = worksheet.addRow(['Pihak Penyerah,', 'Pihak Penerima,']);
+        sigHeader.height = 20;
+        sigHeader.eachCell(cell => { 
+            cell.font = { name: 'Arial', bold: true, size: 11 }; 
+            cell.alignment = { horizontal: 'center', vertical: 'middle' }; 
+        });
+
+        // Space for signature
+        worksheet.addRow([]);
+        worksheet.addRow([]);
+        worksheet.addRow([]);
+
+        const nameRow = worksheet.addRow([
+            data.pihak_penyerah || '( ............................ )', 
+            data.pihak_penerima || '( ............................ )'
+        ]);
+        nameRow.height = 20;
+        nameRow.eachCell(cell => { 
+            cell.font = { name: 'Arial', bold: true, size: 11, underline: true }; 
+            cell.alignment = { horizontal: 'center', vertical: 'middle' }; 
+        });
+
+        worksheet.addRow([]);
+        const knowingRow = worksheet.addRow(['Mengetahui,']);
+        worksheet.mergeCells(`A${knowingRow.number}:B${knowingRow.number}`);
+        knowingRow.getCell(1).font = { name: 'Arial', size: 11 };
+        knowingRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        worksheet.addRow([]);
+        worksheet.addRow([]);
+        const managementRow = worksheet.addRow(['ICONNET']);
+        worksheet.mergeCells(`A${managementRow.number}:B${managementRow.number}`);
+        managementRow.getCell(1).font = { name: 'Arial', bold: true, size: 11, color: { argb: 'FF4F46E5' } };
+        managementRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        // 5. NOTES SECTION
+        if (data.catatan) {
+            worksheet.addRow([]);
+            worksheet.addRow([]);
+            const noteHeader = worksheet.addRow(['Catatan:']);
+            noteHeader.getCell(1).font = { name: 'Arial', bold: true, size: 10 };
+            
+            const noteContent = worksheet.addRow([data.catatan]);
+            worksheet.mergeCells(`A${noteContent.number}:B${noteContent.number}`);
+            noteContent.getCell(1).font = { name: 'Arial', italic: true, size: 10, color: { argb: 'FF64748B' } };
+            noteContent.getCell(1).alignment = { wrapText: true };
+        }
+
+        // Export and Download
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `BA_SERAH_TERIMA_${data.item_id || 'ITEM'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        
+        showToast('BA Excel profesional berhasil diunduh!');
+    } catch (error) {
+        console.error('Error generating Excel:', error);
+        showToast('Gagal membuat file Excel!', true);
+    }
+}
+
+// ============================================
+// EXPORT EXCEL - DATA SERAH TERIMA
+// ============================================
+async function exportHandoverToExcel() {
+    var btn = document.getElementById('exportHandoverExcel');
+    if (btn && btn.disabled) return;
+    if (btn) btn.disabled = true;
+
+    try {
+        showToast('Sedang menyiapkan laporan Excel...');
+        
+        // Load data
+        let data = handoverData || [];
+        if (data.length === 0) {
+            try {
+                const response = await fetch('/api/handover');
+                if (response.ok) {
+                    const apiData = await response.json();
+                    data = Array.isArray(apiData) ? apiData : [];
+                }
+            } catch (e) { console.warn('Fetch error:', e); }
+        }
+
+        if (data.length === 0) {
+            showToast('Tidak ada data untuk diexport!', true);
+            return;
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Laporan Serah Terima');
+
+        // 1. SET COLUMNS
+        worksheet.columns = [
+            { header: 'No', key: 'no', width: 6 },
+            { header: 'Jenis', key: 'jenis', width: 12 },
+            { header: 'No Berita Acara', key: 'no_ba', width: 35 },
+            { header: 'ID Item', key: 'id_item', width: 15 },
+            { header: 'Nama Barang', key: 'nama', width: 25 },
+            { header: 'Penyerah', key: 'penyerah', width: 20 },
+            { header: 'Penerima', key: 'penerima', width: 20 },
+            { header: 'Tanggal', key: 'tanggal', width: 22 },
+            { header: 'Kondisi Before', key: 'before', width: 18 },
+            { header: 'Kondisi After', key: 'after', width: 18 },
+            { header: 'Lokasi Baru', key: 'lokasi', width: 22 },
+            { header: 'Catatan', key: 'catatan', width: 30 }
+        ];
+
+        // 2. HEADER LAPORAN (MANUAL INSERTION AT TOP)
+        // Shift worksheet down to make room for header
+        worksheet.insertRow(1, []);
+        worksheet.insertRow(1, []);
+        worksheet.insertRow(1, []);
+        worksheet.insertRow(1, []);
+
+        // Title
+        worksheet.mergeCells('A1:L1');
+        const titleCell = worksheet.getCell('A1');
+        titleCell.value = 'LAPORAN SERAH TERIMA INVENTARIS';
+        titleCell.font = { name: 'Arial', bold: true, size: 16, color: { argb: 'FF1E293B' } };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(1).height = 30;
+
+        // Subtitle (Date)
+        worksheet.mergeCells('A2:L2');
+        const dateCell = worksheet.getCell('A2');
+        dateCell.value = 'Dicetak pada: ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        dateCell.font = { name: 'Arial', size: 10, color: { argb: 'FF64748B' } };
+        dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        // 3. LOGO
+        try {
+            const logoResponse = await fetch('img/logo1.png');
+            if (logoResponse.ok) {
+                const logoBuffer = await logoResponse.arrayBuffer();
+                const logoId = workbook.addImage({
+                    buffer: logoBuffer,
+                    extension: 'png',
+                });
+                worksheet.addImage(logoId, {
+                    tl: { col: 10, row: 0.1 }, // Column K
+                    ext: { width: 120, height: 40 }
+                });
+            }
+        } catch (e) { console.warn('Logo error:', e); }
+
+        // 4. STYLE THE TABLE HEADERS (Row 5 now)
+        const headerRow = worksheet.getRow(5);
+        headerRow.values = ['No', 'Jenis', 'No BA', 'ID Item', 'Nama Barang', 'Penyerah', 'Penerima', 'Tanggal', 'Kondisi Before', 'Kondisi After', 'Lokasi Baru', 'Catatan'];
+        headerRow.height = 25;
+        headerRow.eachCell((cell) => {
+            cell.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } }; // Indigo 600
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = {
+                top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
+            };
+        });
+
+        // 5. DATA ROWS
+        data.forEach((item, index) => {
+            const row = worksheet.addRow([
+                index + 1,
+                item.jenis || '-',
+                item.no_berita_acara || '-',
+                item.item_id || '-',
+                item.item_name || '-',
+                item.pihak_penyerah || '-',
+                item.pihak_penerima || '-',
+                item.tanggal_serah_terima ? formatTanggalIndonesia(item.tanggal_serah_terima) : '-',
+                item.kondisi_before || '-',
+                item.kondisi_after || '-',
+                item.lokasi_baru || '-',
+                item.catatan || '-'
+            ]);
+
+            row.height = 22;
+            const isEven = index % 2 === 0;
+            
+            row.eachCell((cell, colNumber) => {
+                // Zebra Striping
+                if (!isEven) {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+                }
+
+                // Borders
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                    left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                    bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                    right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+                };
+
+                // Alignment
+                cell.font = { name: 'Arial', size: 9 };
+                const colKey = [1, 2, 8].includes(colNumber) ? 'center' : ([5, 11, 12].includes(colNumber) ? 'left' : 'center');
+                cell.alignment = { horizontal: colKey, vertical: 'middle', wrapText: true, indent: colKey === 'left' ? 1 : 0 };
+            });
+        });
+
+        // 6. FOOTER
+        worksheet.addRow([]);
+        const footerStart = worksheet.addRow([]);
+        const footerRow1 = worksheet.addRow(['Dicetak oleh sistem']);
+        const footerRow2 = worksheet.addRow(['ICONNET']);
+        
+        [footerRow1, footerRow2].forEach(row => {
+            worksheet.mergeCells(`A${row.number}:L${row.number}`);
+            row.getCell(1).font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF94A3B8' } };
+            row.getCell(1).alignment = { horizontal: 'left' };
+        });
+
+        // Export
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `Laporan_Serah_Terima_${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        
+        showToast('Laporan Excel berhasil diunduh!');
+    } catch (error) {
+        console.error('Export Excel Error:', error);
+        showToast('Gagal export Excel: ' + error.message, true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function exportHandoverToPdf() {
+    var btn = document.getElementById('exportHandoverPdf');
+    if (btn && btn.disabled) return;
+    if (btn) btn.disabled = true;
+
+    try {
+        var data = handoverData || [];
+
+        if (data.length === 0) {
+            showToast('Tidak ada data untuk export!', true);
+            return;
+        }
+
+        var result = createPdfDoc('LAPORAN DATA SERAH TERIMA', 'landscape');
+        var doc = result.doc;
+
+        var tableData = [];
+        for (var i = 0; i < data.length; i++) {
+            var h = data[i] || {};
+            tableData.push([
+                i + 1,
+                h.jenis || '-',
+                h.no_berita_acara || '-',
+                h.item_id || '-',
+                h.item_name || '-',
+                h.pihak_penyerah || '-',
+                h.pihak_penerima || '-',
+                h.tanggal_serah_terima || '-',
+                h.kondisi_before || '-',
+                h.kondisi_after || '-',
+                h.lokasi_baru || '-',
+                h.catatan || '-'
+            ]);
+        }
+
+        var tableOptions = applyPdfTableStyle(doc, {
+            head: [['No', 'Jenis', 'No BA', 'ID Item', 'Nama', 'Penyerah', 'Penerima', 'Tanggal', 'Kondisi(B)', 'Kondisi(A)', 'Lokasi', 'Catatan']],
+            body: tableData,
+            columnStyles: {
+                0: { cellWidth: 10, halign: 'center' },
+                1: { cellWidth: 18 },
+                2: { cellWidth: 35 },
+                3: { cellWidth: 18 },
+                4: { cellWidth: 22, halign: 'left' },
+                5: { cellWidth: 20, halign: 'left' },
+                6: { cellWidth: 20, halign: 'left' },
+                7: { cellWidth: 22 },
+                8: { cellWidth: 18 },
+                9: { cellWidth: 18 },
+                10: { cellWidth: 22, halign: 'left' },
+                11: { cellWidth: 'auto', halign: 'left' }
+            }
+        });
+
+        doc.autoTable(tableOptions);
+
+        doc.save('serah_terima_' + new Date().toISOString().split('T')[0] + '.pdf');
+        showToast('PDF berhasil diunduh!');
+
+    } catch (e) {
+        console.error('Export PDF Error:', e);
+        showToast('Gagal export PDF: ' + e.message, true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }

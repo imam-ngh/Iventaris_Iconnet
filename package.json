@@ -4,7 +4,7 @@
   "description": "Office Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node migrate.js && node server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
