@@ -23,6 +23,12 @@ Iconnet Inventory System adalah aplikasi berbasis web yang dirancang khusus untu
 - **Automatic Code Generation**: Generate QR Code dan Barcode (CODE128) secara otomatis untuk setiap item.
 - **Cek Inventaris Massal**: Sistem checklist inventaris yang memudahkan audit aset berkala.
 
+### 🗺️ Interactive Office Mapping
+- **Visual Map Designer**: Susun tata letak kubikel secara drag-and-drop pada kanvas digital yang interaktif.
+- **Bulk Placement**: Fitur pilih banyak kubikel sekaligus dan pasang ke denah secara otomatis dengan formasi grid.
+- **Custom Text Labels**: Tambahkan penanda teks kustom (misal: "Area A", "Ruang Meeting") untuk memperjelas pembagian wilayah kantor.
+- **Live Monitoring Dashboard**: Pantau okupansi setiap kubikel secara real-time langsung dari peta interaktif di dashboard.
+
 ### ✍️ Digital Signature & Report
 - **Handover Module**: Modul serah terima barang yang dilengkapi dengan **Digital Signature** (Tanda Tangan Digital).
 - **Export Professional**: Ekspor data ke format **Excel** dan **PDF** (Berita Acara) dengan branding Iconnet.
