@@ -5,6 +5,7 @@ let inventoryData = [];
 let deleteItemId = null;
 let selectedItems = new Set();
 let selectedHistoryItems = new Set();
+let selectedPaletteItems = new Set();
 let signaturePad, inventoryDistChart, conditionChart;
 
 // ========================================
@@ -25,15 +26,18 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('userName').textContent = user.name;
     }
 
-    // Initialize app
-    loadInventory();
-    setupEventListeners();
-    
+    // Initialize app - Load positions first to avoid race conditions
+    loadCubiclePositions().then(() => {
+        loadInventory();
+        setupEventListeners();
+        initGlobalEventListeners(); // Set up delegation
+    });
+
     // Premium Upgrade: only init theme & charts at startup
     // Signature pad is initialized lazily when navigating to the page
     setTimeout(() => {
-        if(typeof initTheme === 'function') initTheme();
-        if(typeof initCharts === 'function') initCharts();
+        if (typeof initTheme === 'function') initTheme();
+        if (typeof initCharts === 'function') initCharts();
     }, 300);
 });
 
@@ -88,9 +92,9 @@ function getCategoryBadgeClass(category) {
 // ========================================
 // ACTION BUTTON EVENT LISTENERS (Event Delegation)
 // ========================================
-function attachActionButtonListeners() {
+function attachActionButtonListeners(containerId = 'inventoryTableBody') {
     // Use event delegation on the table body for better reliability
-    const tableBody = document.getElementById('inventoryTableBody');
+    const tableBody = document.getElementById(containerId);
     if (!tableBody) return;
 
     // Remove old delegation if exists
@@ -98,26 +102,80 @@ function attachActionButtonListeners() {
 
     // Add new delegation
     tableBody.onclick = function (e) {
-        const btn = e.target.closest('.action-btn');
-        if (!btn) return;
+        try {
+            const btn = e.target.closest('.action-btn');
+            if (!btn) return;
 
-        const row = btn.closest('tr');
-        const id = row ? row.getAttribute('data-id') : null;
-        if (!id) return;
+            const row = btn.closest('tr');
+            const id = row ? row.getAttribute('data-id') : null;
+            if (!id) {
+                console.warn('[ACTION] Clicked button but no ID found in row');
+                return;
+            }
 
-        // Prevent default and stop propagation
-        e.preventDefault();
-        e.stopPropagation();
+            // Prevent default and stop propagation
+            e.preventDefault();
+            e.stopPropagation();
 
-        // Call appropriate function based on button class
-        if (btn.classList.contains('view')) {
-            viewItem(id);
-        } else if (btn.classList.contains('edit')) {
-            editItem(id);
-        } else if (btn.classList.contains('delete')) {
-            deleteItem(id);
+            console.log('[ACTION] Triggered:', btn.classList[1], 'for ID:', id);
+
+            // Call appropriate function based on button class
+            if (btn.classList.contains('view')) {
+                viewItem(id);
+            } else if (btn.classList.contains('edit')) {
+                editItem(id);
+            } else if (btn.classList.contains('print')) {
+                printProfessionalLabel(id);
+            } else if (btn.classList.contains('delete')) {
+                deleteItem(id);
+            }
+        } catch (err) {
+            console.error('[ACTION] Error handling click:', err);
         }
     };
+}
+
+// ========================================
+// MODAL HELPERS
+// ========================================
+// Robust Modal State Management
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.add('show');
+    }
+}
+
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Close modals when clicking outside
+window.addEventListener('click', function (event) {
+    if (event.target.classList.contains('modal')) {
+        closeModal(event.target.id);
+    }
+});
+
+// ========================================
+// PERSISTENT EVENT DELEGATION
+// ========================================
+function initGlobalEventListeners() {
+    // Dashboard Map Delegation - NEVER REMOVED
+    const dashboardMap = document.getElementById('dashboardMiniMap');
+    if (dashboardMap) {
+        dashboardMap.onclick = function(e) {
+            const cubicle = e.target.closest('.cubicle-view');
+            if (cubicle) {
+                const id = cubicle.getAttribute('data-id');
+                console.log('[DELEGATION] Cubicle clicked:', id);
+                if (id) handleCubicleClick(id);
+            }
+        };
+    }
 }
 
 // ========================================
@@ -335,7 +393,241 @@ function logout() {
 // ========================================
 // NAVIGATION
 // ========================================
-function navigateTo(page) {
+// ========================================
+// DASHBOARD FUNCTIONS
+// ========================================
+function updateDashboard() {
+    console.log('Updating Dashboard with', inventoryData.length, 'items');
+
+    // Helper to count items by name (very robust matching)
+    const countItem = (keyword) => {
+        return inventoryData.filter(item => {
+            // Check multiple possible property names (name, nama_barang, item_name)
+            const itemName = item.name || item.nama_barang || item.item_name;
+            if (!itemName) return false;
+
+            const name = itemName.toString().toLowerCase().trim();
+            const key = keyword.toLowerCase().trim();
+            return name.includes(key);
+        }).length;
+    };
+
+    // Basic Stats
+    const totalItems = inventoryData.length;
+    const monitors = countItem('Monitor');
+    const laptops = countItem('Laptop');
+    const pcs = countItem('PC');
+    const keyboards = countItem('Keyboard');
+    const mice = countItem('Mouse');
+    const headsets = countItem('Headset');
+    const tvs = countItem('TV');
+
+    console.log('Stats calculated:', { monitors, laptops, pcs, keyboards, mice, headsets, tvs });
+
+    if (document.getElementById('totalItems')) {
+        document.getElementById('totalItems').textContent = totalItems;
+    }
+
+    // Update all 7 dashboard cards
+    const dashStats = {
+        'totalMonitorsDashboard': monitors,
+        'totalKeyboardsDashboard': keyboards,
+        'totalMiceDashboard': mice,
+        'totalHeadsetsDashboard': headsets,
+        'totalLaptopsDashboard': laptops,
+        'totalPCsDashboard': pcs,
+        'totalTVsDashboard': tvs
+    };
+
+    Object.keys(dashStats).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            // Use animation if available
+            if (typeof animateCountUp === 'function') {
+                animateCountUp(id, dashStats[id]);
+            } else {
+                el.textContent = dashStats[id];
+            }
+            // Force update opacity if it was hidden
+            const card = el.closest('.stat-card');
+            if (card) card.style.opacity = '1';
+        }
+    });
+
+    // Main total items animation
+    if (document.getElementById('totalItems')) {
+        if (typeof animateCountUp === 'function') {
+            animateCountUp('totalItems', totalItems);
+        } else {
+            document.getElementById('totalItems').textContent = totalItems;
+        }
+    }
+
+    // Fallback for old IDs (also with animation)
+    if (typeof animateCountUp === 'function') {
+        if (document.getElementById('totalMonitors')) animateCountUp('totalMonitors', monitors);
+        if (document.getElementById('totalKeyboards')) animateCountUp('totalKeyboards', keyboards);
+        if (document.getElementById('totalMice')) animateCountUp('totalMice', mice);
+    } else {
+        if (document.getElementById('totalMonitors')) document.getElementById('totalMonitors').textContent = monitors;
+        if (document.getElementById('totalKeyboards')) document.getElementById('totalKeyboards').textContent = keyboards;
+        if (document.getElementById('totalMice')) document.getElementById('totalMice').textContent = mice;
+    }
+
+    // Occupancy Analytics (Idea 3)
+    if (cubiclePositions && cubiclePositions.length > 0) {
+        const occupiedCount = cubiclePositions.filter(pos =>
+            inventoryData.some(inv => (inv.cubicle_id || inv.cubicleId) === pos.cubicle_id)
+        ).length;
+        const percent = Math.round((occupiedCount / cubiclePositions.length) * 100);
+
+        const percentEl = document.getElementById('occupiedPercent');
+        const barEl = document.getElementById('occupancyBar');
+        if (percentEl) percentEl.textContent = `${percent}%`;
+        if (barEl) barEl.style.width = `${percent}%`;
+
+        renderDashboardMap();
+    }
+
+    // Update Recent Activities
+    updateRecentActivities();
+
+    // Update charts if available
+    if (typeof updateChartsData === 'function') updateChartsData();
+}
+
+function updateRecentActivities() {
+    const recentTableBody = document.getElementById('recentTableBody');
+    if (!recentTableBody) return;
+
+    // Get last 5 items
+    const recentItems = [...inventoryData].slice(-5).reverse();
+
+    if (recentItems.length === 0) {
+        recentTableBody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-secondary);">Belum ada aktivitas</td></tr>';
+    } else {
+        recentTableBody.innerHTML = recentItems.map((item, index) => {
+            const itemName = item.name || item.nama_barang || item.item_name || '-';
+            const kondisiBefore = item.kondisi_before || item.kondisiBefore || '-';
+            const kondisiAfter = item.kondisi_after || item.kondisiAfter || '-';
+
+            return `
+                <tr style="animation: fadeSlideIn 0.5s ease forwards; animation-delay: ${index * 0.1}s; opacity: 0;">
+                    <td><span class="category-badge ${itemName.toLowerCase().replace(/\s+/g, '-')}">${itemName}</span></td>
+                    <td>${item.merk || '-'}</td>
+                    <td><span class="barcode-display">${item.sn || '-'}</span></td>
+                    <td>${item.lokasi || '-'}</td>
+                    <td><span class="status-badge ${kondisiBefore.replace(/\s+/g, '_').toLowerCase()}">${kondisiBefore}</span></td>
+                    <td><span class="status-badge ${kondisiAfter.replace(/\s+/g, '_').toLowerCase()}">${kondisiAfter}</span></td>
+                    <td><span class="status-badge ${item.checklist || '-'}">${item.checklist || '-'}</span></td>
+                    <td>${item.catatan || '-'}</td>
+                    <td>${item.date || item.created_at || '-'}</td>
+                    <td><span class="barcode-display">${item.id || '-'}</span></td>
+                </tr>
+            `;
+        }).join('');
+    }
+}
+
+// Helper to get cubicle_id consistently
+function getCubicleId(item) {
+    return item.cubicle_id || item.cubicleId || '';
+}
+
+function renderDashboardMap() {
+    const container = document.getElementById('dashboardMiniMap');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (cubiclePositions.length === 0) {
+        container.innerHTML = '<div class="empty-state mini"><i class="fas fa-map-marker-alt"></i><p style="font-size: 10px;">Belum ada denah</p></div>';
+        return;
+    }
+
+    cubiclePositions.forEach(pos => {
+        // NEW: Handle Labels on Dashboard (More robust detection)
+        const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+        
+        if (isLabel) {
+            const div = document.createElement('div');
+            div.className = 'view-label mini';
+            div.style.left = `${pos.x}px`;
+            div.style.top = `${pos.y}px`;
+            div.style.fontSize = '8px';
+            div.style.padding = '2px 4px';
+            div.textContent = pos.text || '';
+            container.appendChild(div);
+            return;
+        }
+
+        const items = inventoryData.filter(inv => getCubicleId(inv) === pos.cubicle_id);
+        const isOccupied = items.length > 0;
+
+        const div = document.createElement('div');
+        div.className = `cubicle-view mini ${isOccupied ? 'occupied' : ''}`;
+        div.setAttribute('data-id', pos.cubicle_id);
+        div.style.left = `${pos.x}px`;
+        div.style.top = `${pos.y}px`;
+        div.style.transform = 'scale(0.8)';
+
+        // Smart Icon logic
+        let iconClass = 'fa-plus';
+        if (isOccupied) {
+            const hasLaptop = items.some(i => (i.name || '').toLowerCase().includes('laptop'));
+            const hasPC = items.some(i => (i.name || '').toLowerCase().includes('pc') || (i.name || '').toLowerCase().includes('server'));
+            iconClass = hasLaptop ? 'fa-laptop' : (hasPC ? 'fa-server' : 'fa-desktop');
+        }
+
+        div.innerHTML = `
+            <span class="cubicle-id" style="font-size: 8px;">${pos.cubicle_id}</span>
+            <i class="fas ${iconClass} cubicle-icon" style="font-size: 10px;"></i>
+            <div class="cubicle-tooltip">
+                <strong>${pos.cubicle_id}</strong><br>
+                ${isOccupied ? `${items.length} Barang Terpasang` : 'Belum Ada Barang'}
+            </div>
+        `;
+
+        container.appendChild(div);
+    });
+}
+
+// Idea 2: Smart Highlight Search
+function highlightDashboardMap() {
+    const query = document.getElementById('dashboardMapSearch').value.toLowerCase();
+    const cubicles = document.querySelectorAll('#dashboardMiniMap .cubicle-view');
+
+    if (!query) {
+        cubicles.forEach(c => c.classList.remove('highlight-pulse', 'dimmed'));
+        return;
+    }
+
+    cubicles.forEach(c => {
+        const cubicleId = c.getAttribute('data-id');
+        const items = inventoryData.filter(inv => getCubicleId(inv) === cubicleId);
+
+        // Check if cubicle ID or any item inside matches query
+        const match = cubicleId.toLowerCase().includes(query) ||
+            items.some(inv =>
+                (inv.name && inv.name.toLowerCase().includes(query)) ||
+                (inv.sn && inv.sn.toLowerCase().includes(query)) ||
+                (inv.merk && inv.merk.toLowerCase().includes(query))
+            );
+
+        if (match) {
+            c.classList.add('highlight-pulse');
+            c.classList.remove('dimmed');
+        } else {
+            c.classList.remove('highlight-pulse');
+            c.classList.add('dimmed');
+        }
+    });
+}
+
+// Expose to global
+window.highlightDashboardMap = highlightDashboardMap;
+
+async function navigateTo(page) {
     // Update menu
     document.querySelectorAll('.menu-item').forEach(item => {
         item.classList.remove('active');
@@ -358,21 +650,30 @@ function navigateTo(page) {
     }
 
     // Update page with animation
-    document.querySelectorAll('.page').forEach(p => {
-        p.classList.remove('active');
-    });
-    const targetPage = document.getElementById(page + 'Page');
-    targetPage.classList.add('active');
+    console.log('[NAV] Navigating to:', page);
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
 
-    // Add stagger animation to cards on dashboard
-    if (page === 'dashboard') {
-        const cards = targetPage.querySelectorAll('.stat-card');
-        cards.forEach((card, index) => {
-            card.style.animationDelay = `${index * 0.1}s`;
-            card.style.opacity = '0';
-            card.style.animation = 'fadeSlideIn 0.5s ease forwards';
-            card.style.animationDelay = `${index * 0.1}s`;
-        });
+    // Fix: Close any open modals when navigating
+    document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
+
+    const pageId = page + 'Page';
+    const targetPage = document.getElementById(pageId);
+    
+    if (targetPage) {
+        console.log('[NAV] Target page found:', pageId);
+        targetPage.classList.add('active');
+        
+        // Add stagger animation to cards on dashboard
+        if (page === 'dashboard') {
+            const cards = targetPage.querySelectorAll('.stat-card');
+            cards.forEach((card, index) => {
+                card.style.animationDelay = `${index * 0.1}s`;
+                card.style.opacity = '0';
+                card.style.animation = 'fadeSlideIn 0.5s ease forwards';
+            });
+        }
+    } else {
+        console.error('[NAV] CRITICAL: Page not found!', pageId);
     }
 
     // Update title
@@ -384,15 +685,22 @@ function navigateTo(page) {
         'history': 'History',
         'handover': 'Serah Terima',
         'handover-data': 'Data Serah Terima',
-        'handover-input': 'Input Serah Terima'
+        'handover-input': 'Input Serah Terima',
+        'map-designer': 'Mapping Lokasi',
+        'map-view': 'Visualisasi Denah'
     };
-    document.getElementById('pageTitle').textContent = pageTitles[page];
+    document.getElementById('pageTitle').textContent = pageTitles[page] || 'Inventory System';
 
     // Update content
     if (page === 'dashboard') {
-        updateDashboard();
+        // Small delay to ensure the DOM is ready for map rendering
+        setTimeout(() => {
+            updateDashboard();
+        }, 100);
     } else if (page === 'inventory') {
         updateInventoryTable();
+    } else if (page === 'map-designer' || page === 'map-view') {
+        renderMap();
     } else if (page === 'scan') {
         initScanPage();
     } else if (page === 'history') {
@@ -403,7 +711,7 @@ function navigateTo(page) {
         loadHandover();
         // Reinit signature pad after brief delay to ensure canvas is visible
         setTimeout(() => {
-            if(typeof initSignaturePad === 'function') initSignaturePad();
+            if (typeof initSignaturePad === 'function') initSignaturePad();
         }, 150);
     }
 }
@@ -592,53 +900,7 @@ async function deleteSelectedItems() {
 // ========================================
 // DASHBOARD
 // ========================================
-function updateDashboard() {
-    // Calculate stats
-    const total = inventoryData.length;
-    const monitors = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'monitor').length;
-    const keyboards = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'keyboard').length;
-    const mice = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'mouse').length;
-    const headsets = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'headset').length;
-    const laptops = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'laptop').length;
-    const pcs = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'pc').length;
-    const tvs = inventoryData.filter(item => item.name && item.name.toLowerCase() === 'tv').length;
-
-    // Animate count-up for stats
-    animateCountUp('totalItems', total);
-    animateCountUp('totalMonitors', monitors);
-    animateCountUp('totalKeyboards', keyboards);
-    animateCountUp('totalMice', mice);
-    animateCountUp('totalHeadsets', headsets);
-    animateCountUp('totalLaptops', laptops);
-    animateCountUp('totalPCs', pcs);
-    animateCountUp('totalTVs', tvs);
-
-    // Update recent activity
-    const recentTableBody = document.getElementById('recentTableBody');
-    const recentItems = inventoryData.slice(-5).reverse();
-
-    if (recentItems.length === 0) {
-        recentTableBody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-secondary);">Belum ada aktivitas</td></tr>';
-    } else {
-        recentTableBody.innerHTML = recentItems.map((item, index) => `
-            <tr style="animation: fadeSlideIn 0.5s ease forwards; animation-delay: ${index * 0.1}s; opacity: 0;">
-                <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
-                <td>${item.merk || '-'}</td>
-                <td><span class="barcode-display">${item.sn || '-'}</span></td>
-                <td>${item.lokasi || '-'}</td>
-                <td><span class="status-badge ${(item.kondisiBefore || '').replace(/\s+/g, '_')}">${item.kondisiBefore || '-'}</span></td>
-                <td><span class="status-badge ${(item.kondisiAfter || '').replace(/\s+/g, '_')}">${item.kondisiAfter || '-'}</span></td>
-                <td><span class="status-badge ${(item.checklist || '')}">${item.checklist || '-'}</span></td>
-                <td>${item.catatan || '-'}</td>
-                <td>${item.date || '-'}</td>
-                <td><span class="barcode-display">${item.id || '-'}</span></td>
-            </tr>
-        `).join('');
-    }
-    
-    // Update charts
-    if(typeof updateChartsData === 'function') updateChartsData();
-}
+// Redundant updateDashboard removed (consolidated at the top)
 
 
 // ========================================
@@ -808,9 +1070,10 @@ function updateInventoryTable() {
                 <td><span class="barcode-value">${item.barcode || item.id || '-'}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn view" onclick="viewItem('${item.id}')" title="Lihat"><i class="fas fa-eye"></i></button>
-                        <button class="action-btn edit" onclick="editItem('${item.id}')" title="Edit"><i class="fas fa-edit"></i></button>
-                        <button class="action-btn delete" onclick="deleteItem('${item.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
+                        <button class="action-btn view" title="Lihat"><i class="fas fa-eye"></i></button>
+                        <button class="action-btn edit" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="action-btn print" title="Cetak Label"><i class="fas fa-print"></i></button>
+                        <button class="action-btn delete" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
             </tr>
@@ -1313,14 +1576,6 @@ async function confirmDelete() {
     }
 }
 
-function openModal(modalId) {
-    document.getElementById(modalId).classList.add('show');
-}
-
-function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('show');
-}
-
 // ========================================
 // EXPORT FUNCTIONS
 // ========================================
@@ -1809,7 +2064,7 @@ function startCamera() {
 
     // Check if Secure Context (HTTPS)
     const isSecure = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    
+
     if (!isSecure) {
         showToast('Kamera membutuhkan HTTPS untuk berjalan di HP!', true);
         alert('Fitur kamera di HP diblokir browser karena menggunakan HTTP biasa. \n\nSolusi: \n1. Gunakan Ngrok untuk mendapatkan link HTTPS \n2. Atau buka chrome://flags/#unsafely-treat-insecure-origin-as-secure di Chrome HP dan masukkan IP komputer Anda.');
@@ -2871,9 +3126,9 @@ function sortAndRenderInventory() {
                 <td><span class="barcode-value">${item.barcode || item.id || '-'}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn view" onclick="viewItem('${item.id}')" title="Lihat"><i class="fas fa-eye"></i></button>
-                        <button class="action-btn edit" onclick="editItem('${item.id}')" title="Edit"><i class="fas fa-edit"></i></button>
-                        <button class="action-btn delete" onclick="deleteItem('${item.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
+                        <button class="action-btn view" title="Lihat"><i class="fas fa-eye"></i></button>
+                        <button class="action-btn edit" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="action-btn delete" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
             </tr>
@@ -2884,7 +3139,7 @@ function sortAndRenderInventory() {
         attachCheckboxListeners();
 
         // Attach action button listeners
-        attachActionButtonListeners();
+        attachActionButtonListeners('historyTableBody');
     }
 }
 
@@ -3564,11 +3819,11 @@ async function deleteSelectedHandover() {
 
 function formatTanggalIndonesia(dateStr, includeTime) {
     if (!dateStr) return '-';
-    
+
     // Check if it's an ISO string or has 'T'
     const isIso = dateStr.includes('T');
     const dateObj = new Date(dateStr);
-    
+
     // If invalid date object and not ISO-like, try to parse
     if (isNaN(dateObj.getTime()) && !isIso) {
         const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -3588,7 +3843,7 @@ function formatTanggalIndonesia(dateStr, includeTime) {
         month: 'long',
         year: 'numeric'
     };
-    
+
     if (includeTime) {
         options.hour = '2-digit';
         options.minute = '2-digit';
@@ -3596,7 +3851,7 @@ function formatTanggalIndonesia(dateStr, includeTime) {
         // If it already contains 'pukul', just fix dots. Otherwise add it.
         return formatted.includes('pukul') ? formatted : formatted.replace(/ (\d{2}:\d{2})/, ' pukul $1');
     }
-    
+
     return dateObj.toLocaleString('id-ID', options);
 }
 
@@ -4260,7 +4515,7 @@ function initSignaturePad() {
 
     // Destroy previous instance if exists
     if (signaturePad) {
-        try { signaturePad.off(); } catch(e) {}
+        try { signaturePad.off(); } catch (e) { }
         signaturePad = null;
     }
 
@@ -4270,7 +4525,7 @@ function initSignaturePad() {
         const w = canvas.offsetWidth;
         const h = canvas.offsetHeight;
         if (w === 0 || h === 0) return; // not visible yet, skip
-        canvas.width  = w * ratio;
+        canvas.width = w * ratio;
         canvas.height = h * ratio;
         const ctx = canvas.getContext('2d');
         ctx.scale(ratio, ratio);
@@ -4309,10 +4564,10 @@ function initCharts() {
 
     const distCtx = distCanvas.getContext('2d');
     const condCtx = condCanvas.getContext('2d');
-    
+
     const theme = document.body.getAttribute('data-theme');
     const textColor = theme === 'dark' ? '#f8fafc' : '#0f172a';
-    
+
     inventoryDistChart = new Chart(distCtx, {
         type: 'doughnut',
         data: {
@@ -4333,7 +4588,7 @@ function initCharts() {
             }
         }
     });
-    
+
     conditionChart = new Chart(condCtx, {
         type: 'bar',
         data: {
@@ -4368,18 +4623,18 @@ function updateChartsData() {
     if (!inventoryData || inventoryData.length === 0) return;
     if (!inventoryDistChart || !conditionChart) initCharts();
     if (!inventoryDistChart || !conditionChart) return;
-    
+
     // Distribution
     const dist = {};
     inventoryData.forEach(item => {
         const name = item.name || item.nama_barang || 'Unknown';
         dist[name] = (dist[name] || 0) + 1;
     });
-    
+
     inventoryDistChart.data.labels = Object.keys(dist);
     inventoryDistChart.data.datasets[0].data = Object.values(dist);
     inventoryDistChart.update();
-    
+
     // Condition
     const cond = { 'Baik': 0, 'Rusak Ringan': 0, 'Rusak Berat': 0 };
     inventoryData.forEach(item => {
@@ -4388,7 +4643,591 @@ function updateChartsData() {
         if (cond[kAfter] !== undefined) cond[kAfter]++;
         else if (cond[kBefore] !== undefined) cond[kBefore]++;
     });
-    
+
     conditionChart.data.datasets[0].data = [cond['Baik'], cond['Rusak Ringan'], cond['Rusak Berat']];
     conditionChart.update();
+}
+
+// ========================================
+// PROFESSIONAL LABEL PRINTING
+// ========================================
+function printProfessionalLabel(id) {
+    const item = inventoryData.find(i => i.id === id);
+    if (!item) return;
+
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank', 'width=600,height=600');
+    
+    // Build the print document
+    const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Cetak Label - ${item.id}</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 20px;
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                }
+                .label-box {
+                    display: flex;
+                    align-items: center;
+                    padding: 15px;
+                    border: 1px solid #eee;
+                    border-radius: 8px;
+                    width: fit-content;
+                }
+                .qr-side {
+                    width: 150px;
+                    height: 150px;
+                    margin-right: 20px;
+                }
+                .qr-side img {
+                    width: 100%;
+                    height: 100%;
+                }
+                .info-side {
+                    display: flex;
+                    flex-direction: column;
+                }
+                .logo {
+                    height: 30px;
+                    margin-bottom: 10px;
+                    object-fit: contain;
+                }
+                .item-name {
+                    font-size: 20px;
+                    font-weight: bold;
+                    margin-bottom: 5px;
+                    color: #1e293b;
+                }
+                .item-text {
+                    font-size: 14px;
+                    color: #64748b;
+                    margin: 2px 0;
+                }
+                .item-id {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-top: 10px;
+                    color: #1e293b;
+                    font-family: monospace;
+                }
+                @media print {
+                    @page { margin: 0; }
+                    body { padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="label-box">
+                <div class="qr-side">
+                    ${item.qrCode ? `<img src="${item.qrCode}" alt="QR">` : ''}
+                </div>
+                <div class="info-side">
+                    <img src="img/logo1.png" alt="Iconnet" class="logo">
+                    <div class="item-name">${item.name || 'Inventaris'}</div>
+                    <div class="item-text">SN: ${item.sn || '-'}</div>
+                    <div class="item-text">Lok: ${item.lokasi || '-'}</div>
+                    <div class="item-id">${item.id}</div>
+                </div>
+            </div>
+            <script>
+                window.onload = function() {
+                    setTimeout(() => {
+                        window.print();
+                        window.close();
+                    }, 500);
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+}
+
+// ========================================
+// INTERACTIVE MAP / FLOOR PLAN
+// ========================================
+const cubicleConfig = {
+    'A': 20, 'B': 20, 'C': 27, 'D': 26, 'E': 36, 'F': 28
+};
+let cubiclePositions = [];
+let isDataLoaded = false;
+
+async function loadCubiclePositions() {
+    try {
+        const res = await fetch('/api/cubicle-positions');
+        cubiclePositions = await res.json();
+        isDataLoaded = true;
+
+        // Trigger renders if we are on dashboard or map pages
+        renderDashboardMap();
+        renderMap();
+
+        // Also update dashboard occupancy stats if inventory is already loaded
+        if (inventoryData.length > 0) {
+            updateDashboard();
+        }
+    } catch (e) {
+        console.error('Error loading positions:', e);
+        cubiclePositions = [];
+    }
+}
+
+async function renderMap() {
+    const activePage = document.querySelector('.page.active');
+    if (!activePage) return;
+
+    // Load data only once if not loaded
+    if (!isDataLoaded) {
+        await loadCubiclePositions();
+    }
+
+    try {
+        if (activePage.id === 'map-designerPage') {
+            renderDesigner();
+        } else if (activePage.id === 'map-viewPage') {
+            renderNormalView();
+        }
+    } catch (err) {
+        console.error('[MAP] Render error:', err);
+    }
+}
+
+function renderNormalView() {
+    const mapContainer = document.getElementById('officeMap');
+    const poolContainer = document.getElementById('unassignedPool');
+    if (!mapContainer || !poolContainer) return;
+
+    const unassigned = inventoryData.filter(item => !item.cubicle_id);
+    poolContainer.innerHTML = unassigned.map(item => `
+        <div class="pool-item" draggable="true" ondragstart="dragItemToMap(event, '${item.id}')">
+            <h4>${item.name}</h4>
+            <p>${item.merk || '-'} | SN: ${item.sn || '-'}</p>
+            <p style="font-size: 10px; opacity: 0.7; margin-top: 2px;"><i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}</p>
+        </div>
+    `).join('') || '<p class="text-center p-3 text-secondary">Tidak ada barang tersedia</p>';
+
+    mapContainer.innerHTML = '';
+    cubiclePositions.forEach(pos => {
+        const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+        if (isLabel) {
+            const div = document.createElement('div');
+            div.className = 'view-label';
+            div.style.left = `${pos.x}px`;
+            div.style.top = `${pos.y}px`;
+            div.textContent = pos.text || '';
+            mapContainer.appendChild(div);
+            return;
+        }
+
+        const cubicleId = pos.cubicle_id;
+        const items = inventoryData.filter(inv => inv.cubicle_id === cubicleId);
+        const isOccupied = items.length > 0;
+
+        const div = document.createElement('div');
+        div.className = `cubicle-view ${isOccupied ? 'occupied' : ''}`;
+        div.style.left = `${pos.x}px`;
+        div.style.top = `${pos.y}px`;
+        div.innerHTML = `
+            <span class="cubicle-id">${cubicleId}</span>
+            <i class="fas ${isOccupied ? 'fa-user' : 'fa-plus'} cubicle-icon"></i>
+            ${isOccupied ? `<div class="cubicle-tooltip">${items.length} Items</div>` : ''}
+        `;
+        div.onclick = () => handleCubicleClick(cubicleId);
+        div.ondragover = (e) => allowDrop(e);
+        div.ondrop = (e) => dropItemToCubicle(e, cubicleId);
+        mapContainer.appendChild(div);
+    });
+}
+
+function renderDesigner() {
+    const palette = document.getElementById('cubiclePalette');
+    const canvas = document.getElementById('designerCanvas');
+    if (!palette || !canvas) return;
+
+    let paletteHtml = '';
+    Object.keys(cubicleConfig).forEach(block => {
+        for (let i = 1; i <= cubicleConfig[block]; i++) {
+            const id = `${block}-${String(i).padStart(2, '0')}`;
+            if (!cubiclePositions.find(p => p.cubicle_id === id)) {
+                const isSelected = selectedPaletteItems.has(id);
+                paletteHtml += `
+                    <div class="palette-item ${isSelected ? 'selected' : ''}" 
+                         draggable="true" 
+                         ondragstart="dragPaletteStart(event, '${id}')"
+                         onclick="togglePaletteItem(event, '${id}')">
+                        ${id}
+                    </div>
+                `;
+            }
+        }
+    });
+    palette.innerHTML = paletteHtml;
+
+    // Update bulk add button
+    const bulkAddBtn = document.getElementById('bulkAddBtn');
+    const selectedCountSpan = document.getElementById('selectedPaletteCount');
+    if (bulkAddBtn && selectedCountSpan) {
+        if (selectedPaletteItems.size > 0) {
+            bulkAddBtn.style.display = 'block';
+            selectedCountSpan.textContent = selectedPaletteItems.size;
+        } else {
+            bulkAddBtn.style.display = 'none';
+        }
+    }
+
+    const hint = canvas.querySelector('.canvas-grid-hint');
+    if (cubiclePositions.length > 0) hint.style.display = 'none';
+    else hint.style.display = 'block';
+
+    const existing = canvas.querySelectorAll('.placed-cubicle, .placed-label');
+    existing.forEach(el => el.remove());
+
+    cubiclePositions.forEach(pos => {
+        const div = document.createElement('div');
+        const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+        
+        if (isLabel) {
+            div.className = 'placed-label';
+            div.setAttribute('data-id', pos.cubicle_id);
+            div.style.left = `${pos.x}px`;
+            div.style.top = `${pos.y}px`;
+            div.innerHTML = `
+                <span class="label-text">${pos.text || 'Label'}</span>
+                <button class="remove-placed-btn" onclick="removeFromCanvas(event, '${pos.cubicle_id}')">×</button>
+            `;
+            div.ondblclick = () => editLabelText(pos.cubicle_id);
+        } else {
+            div.className = 'placed-cubicle';
+            div.setAttribute('data-id', pos.cubicle_id);
+            div.style.left = `${pos.x}px`;
+            div.style.top = `${pos.y}px`;
+            div.innerHTML = `
+                <span class="cubicle-id">${pos.cubicle_id}</span>
+                <i class="fas fa-th cubicle-icon"></i>
+                <button class="remove-placed-btn" onclick="removeFromCanvas(event, '${pos.cubicle_id}')">×</button>
+            `;
+        }
+        
+        div.onmousedown = (e) => startMoveOnCanvas(e, pos.cubicle_id);
+        canvas.appendChild(div);
+    });
+}
+
+function removeFromCanvas(event, cubicleId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    console.log('Removing cubicle:', cubicleId);
+    cubiclePositions = cubiclePositions.filter(p => p.cubicle_id !== cubicleId);
+    renderDesigner();
+}
+
+// EXPOSE TO GLOBAL SCOPE
+window.dragPaletteStart = dragPaletteStart;
+window.dropToCanvas = dropToCanvas;
+window.allowDrop = allowDrop;
+window.removeFromCanvas = removeFromCanvas;
+window.saveMapLayout = saveMapLayout;
+window.startMoveOnCanvas = startMoveOnCanvas;
+
+// DRAG FROM PALETTE TO CANVAS
+function dragPaletteStart(e, cubicleId) {
+    e.dataTransfer.setData("type", "palette");
+    e.dataTransfer.setData("cubicleId", cubicleId);
+    if (e.target) e.target.style.opacity = '0.5';
+}
+
+function dropToCanvas(e) {
+    e.preventDefault();
+    const type = e.dataTransfer.getData("type");
+    const cubicleId = e.dataTransfer.getData("cubicleId");
+
+    console.log('Dropped type:', type, 'cubicle:', cubicleId);
+
+    if (type !== "palette") return;
+
+    const canvas = document.getElementById('designerCanvas');
+    const rect = canvas.getBoundingClientRect();
+
+    const x = Math.round((e.clientX - rect.left - 30) / 10) * 10;
+    const y = Math.round((e.clientY - rect.top - 30) / 10) * 10;
+
+    cubiclePositions.push({
+        cubicle_id: cubicleId,
+        x: Math.max(0, x),
+        y: Math.max(0, y)
+    });
+
+    renderDesigner();
+}
+
+function allowDrop(e) {
+    e.preventDefault();
+}
+
+function startMoveOnCanvas(e, cubicleId) {
+    if (e.target && e.target.classList.contains('remove-placed-btn')) return;
+
+    const canvas = document.getElementById('designerCanvas');
+    const rect = canvas.getBoundingClientRect();
+    const item = cubiclePositions.find(p => p.cubicle_id === cubicleId);
+    if (!item) return;
+
+    function onMouseMove(moveEvent) {
+        const x = Math.round((moveEvent.clientX - rect.left - 30) / 10) * 10;
+        const y = Math.round((moveEvent.clientY - rect.top - 30) / 10) * 10;
+
+        item.x = Math.max(0, x);
+        item.y = Math.max(0, y);
+
+        const el = document.querySelector(`.placed-cubicle[data-id="${cubicleId}"]`);
+        if (el) {
+            el.style.left = `${item.x}px`;
+            el.style.top = `${item.y}px`;
+        }
+    }
+
+    function onMouseUp() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        renderDesigner();
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+}
+
+async function saveMapLayout() {
+    try {
+        const response = await fetch('/api/cubicle-positions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ positions: cubiclePositions })
+        });
+
+        const result = await response.json();
+        if (response.ok && result.success) {
+            showToast('Denah berhasil disimpan!');
+            navigateTo('map-view');
+        } else {
+            alert('Gagal menyimpan denah');
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// NEW: Bulk Selection and Addition Functions
+function togglePaletteItem(event, id) {
+    if (selectedPaletteItems.has(id)) {
+        selectedPaletteItems.delete(id);
+    } else {
+        selectedPaletteItems.add(id);
+    }
+    renderDesigner();
+}
+
+async function addSelectedToCanvas() {
+    if (selectedPaletteItems.size === 0) return;
+
+    // Arrange items in a grid starting from an empty space
+    let startX = 50;
+    let startY = 50;
+    let index = 0;
+    const cols = 5;
+    const spacing = 80;
+
+    const itemsToAdd = Array.from(selectedPaletteItems);
+    itemsToAdd.forEach(id => {
+        const row = Math.floor(index / cols);
+        const col = index % cols;
+        
+        cubiclePositions.push({
+            cubicle_id: id,
+            x: startX + (col * spacing),
+            y: startY + (row * spacing)
+        });
+        index++;
+    });
+
+    selectedPaletteItems.clear();
+    renderDesigner();
+    showToast(`Berhasil menambahkan ${itemsToAdd.length} kubikel`);
+}
+
+function addNewLabel() {
+    const labelText = prompt("Masukkan teks label (contoh: Area A, Ruang Meeting):");
+    if (!labelText) return;
+
+    const id = `LABEL_${Date.now()}`;
+    cubiclePositions.push({
+        cubicle_id: id,
+        type: 'label',
+        text: labelText,
+        x: 100,
+        y: 100
+    });
+    renderDesigner();
+}
+
+function editLabelText(id) {
+    const item = cubiclePositions.find(p => p.cubicle_id === id);
+    if (!item || item.type !== 'label') return;
+
+    const newText = prompt("Edit teks label:", item.text);
+    if (newText !== null) {
+        item.text = newText;
+        renderDesigner();
+    }
+}
+
+// SHARED FUNCTIONS
+function filterPoolItems() {
+    const search = document.getElementById('poolSearchInput').value.toLowerCase();
+    const poolItems = document.querySelectorAll('.pool-item');
+    poolItems.forEach(item => {
+        item.style.display = item.innerText.toLowerCase().includes(search) ? 'block' : 'none';
+    });
+}
+
+function dragItemToMap(e, itemId) {
+    e.dataTransfer.setData("type", "item");
+    e.dataTransfer.setData("itemId", itemId);
+}
+
+function allowDrop(e) { e.preventDefault(); }
+
+async function dropItemToCubicle(event, cubicleId) {
+    event.preventDefault();
+    const type = event.dataTransfer.getData("type");
+    const itemId = event.dataTransfer.getData("itemId");
+    if (type !== "item" || !itemId) return;
+    await assignItemToCubicle(itemId, cubicleId);
+}
+
+let selectedCubicleId = null;
+async function handleCubicleClick(cubicleId) {
+    if (!cubicleId) return;
+    console.log('Opening cubicle detail:', cubicleId);
+
+    selectedCubicleId = cubicleId;
+    const cubicleIdEl = document.getElementById('detailCubicleId');
+    if (cubicleIdEl) cubicleIdEl.innerText = cubicleId;
+
+    const itemsList = document.getElementById('cubicleItemsList');
+    if (!itemsList) return;
+
+    itemsList.innerHTML = '<div class="loading-spinner" style="text-align:center; padding:20px;"><i class="fas fa-circle-notch fa-spin"></i> Loading data...</div>';
+
+    // Ensure data is fresh
+    const items = inventoryData.filter(item => getCubicleId(item) === cubicleId);
+
+    if (items.length === 0) {
+        itemsList.innerHTML = `
+            <div class="empty-state-card" style="text-align: center; padding: 40px; opacity: 0.6; animation: fadeIn 0.4s ease;">
+                <div style="width: 60px; height: 60px; background: rgba(37, 99, 235, 0.05); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px;">
+                    <i class="fas fa-box-open" style="font-size: 24px; color: var(--primary);"></i>
+                </div>
+                <p style="font-weight: 600; margin-bottom: 5px; color: var(--text-primary);">Belum Ada Inventaris</p>
+                <p style="font-size: 12px; color: var(--text-secondary);">Silakan tambahkan barang ke kubikel ini melalui menu mapping.</p>
+            </div>
+        `;
+    } else {
+        itemsList.innerHTML = items.map((item, idx) => {
+            const kondisi = item.kondisiAfter || item.kondisiBefore || 'Baik';
+            const statusClass = getStatusBadgeClass(kondisi);
+
+            return `
+            <div class="detailed-item-card" style="display: flex; align-items: center; background: var(--bg-secondary); padding: 16px; border-radius: 14px; margin-bottom: 15px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); animation: slideInUp 0.4s ease forwards; animation-delay: ${idx * 0.08}s; opacity: 0;">
+                <div class="item-icon-circle" style="width: 50px; height: 50px; border-radius: 14px; background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%); color: var(--primary); display: flex; align-items: center; justify-content: center; margin-right: 18px; font-size: 20px; border: 1px solid rgba(37, 99, 235, 0.1);">
+                    <i class="fas ${getItemIcon(item.name)}"></i>
+                </div>
+                <div class="item-info" style="flex: 1;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-weight: 700; font-size: 15px; color: var(--text-primary);">${item.name}</span>
+                        <span class="status-badge ${statusClass}" style="font-size: 10px; font-weight: 600; text-transform: uppercase;">${kondisi}</span>
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">
+                        <span style="color: var(--primary); font-weight: 600;">${item.id}</span> | ${item.merk || '-'}
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: 10px;">
+                        <span><i class="fas fa-barcode"></i> SN: ${item.sn || '-'}</span>
+                        <span><i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}</span>
+                    </div>
+                </div>
+                <div class="item-actions" style="margin-left: 10px;">
+                    <button class="unassign-btn" onclick="assignItemToCubicle('${item.id}', '')" title="Keluarkan dari kubikel" style="width: 36px; height: 36px; border-radius: 10px;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+        }).join('');
+    }
+
+    openModal('cubicleDetailModal');
+}
+
+function openAssignFromDetail() {
+    closeModal('cubicleDetailModal');
+    navigateTo('map-view');
+    // We can also trigger a highlight for the selected cubicle on the map
+    setTimeout(() => {
+        // Fix: Use the correct class or ID for the map container
+        const cubicleElement = document.querySelector(`.office-map-view [data-id="${selectedCubicleId}"]`);
+        if (cubicleElement) {
+            cubicleElement.classList.add('highlight-pulse');
+            cubicleElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => cubicleElement.classList.remove('highlight-pulse'), 5000);
+        }
+    }, 500);
+}
+
+// Helper for icons
+function getItemIcon(name) {
+    const n = name.toLowerCase();
+    if (n.includes('monitor')) return 'fa-desktop';
+    if (n.includes('laptop')) return 'fa-laptop';
+    if (n.includes('keyboard')) return 'fa-keyboard';
+    if (n.includes('mouse')) return 'fa-mouse';
+    if (n.includes('headset')) return 'fa-headset';
+    if (n.includes('pc')) return 'fa-server';
+    if (n.includes('tv')) return 'fa-tv';
+    return 'fa-box';
+}
+
+async function assignItemToCubicle(itemId, cubicleId) {
+    try {
+        const response = await fetch('/api/inventory/assign-cubicle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_id: itemId, cubicle_id: cubicleId })
+        });
+        if (response.ok) {
+            const item = inventoryData.find(inv => inv.id === itemId);
+            if (item) item.cubicle_id = cubicleId;
+            showToast(cubicleId ? `Berhasil ke ${cubicleId}` : 'Dikeluarkan');
+            const modal = document.getElementById('cubicleDetailModal');
+            if (modal && modal.classList.contains('show')) {
+                handleCubicleClick(selectedCubicleId);
+            }
+            renderDashboardMap();
+            renderMap();
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal memproses', 'error');
+    }
 }

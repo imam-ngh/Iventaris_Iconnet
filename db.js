@@ -41,24 +41,27 @@ function normalizeInventoryItem(item) {
     tanggal_masuk: item.tanggal_masuk ?? item.tanggalMasuk ?? item.date ?? null,
     date: item.date || item.tanggalMasuk || null,
     qr_code: item.qr_code ?? item.qrCode ?? '',
+    cubicle_id: item.cubicle_id ?? item.cubicleId ?? '',
     created_at: item.created_at ?? item.createdAt ?? new Date().toISOString()
   };
 }
 
 function loadJsonDb() {
   if (!fs.existsSync(DB_FILE)) {
-    return { users: [], inventory: [], history: [] };
+    return { users: [], inventory: [], history: [], cubicle_positions: [] };
   }
 
   const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
   return {
     users: Array.isArray(raw.users) ? raw.users : [],
     inventory: Array.isArray(raw.inventory) ? raw.inventory : [],
-    history: Array.isArray(raw.history) ? raw.history : []
+    history: Array.isArray(raw.history) ? raw.history : [],
+    cubicle_positions: Array.isArray(raw.cubicle_positions) ? raw.cubicle_positions : []
   };
 }
 
 function saveJsonDb(data) {
+  if (!data.cubicle_positions) data.cubicle_positions = [];
   fs.writeFileSync(DB_FILE, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 }
 
@@ -159,6 +162,7 @@ function jsonQuery(text, params = []) {
         tanggalMasuk,
         date,
         qrCode,
+        cubicle_id: params[14] || '',
         createdAt
       });
       saveJsonDb(data);
@@ -169,8 +173,8 @@ function jsonQuery(text, params = []) {
   }
 
   if (/^UPDATE inventory SET /i.test(sql)) {
-    const id = params[11];
-    const item = data.inventory.find((entry) => entry.id === id);
+    const id = params[12];
+    const item = data.inventory.find((entry) => String(entry.id) === String(id));
     if (!item) {
       return { rows: [], rowCount: 0 };
     }
@@ -180,13 +184,14 @@ function jsonQuery(text, params = []) {
       merk: params[1],
       sn: params[2],
       lokasi: params[3],
-      kondisiBefore: params[4],
+      kondisi_before: params[4],
       checklist: params[5],
-      kondisiAfter: params[6],
+      kondisi_after: params[6],
       catatan: params[7],
-      tanggalMasuk: params[8],
+      tanggal_masuk: params[8],
       date: params[9],
-      qrCode: params[10]
+      sn_converter: params[10],
+      qr_code: params[11]
     });
 
     saveJsonDb(data);
@@ -281,6 +286,44 @@ function jsonQuery(text, params = []) {
       saveJsonDb(data);
     }
     return { rows: [], rowCount };
+  }
+
+  if (/^SELECT cubicle_id, x, y, type, text FROM cubicle_positions$/i.test(sql)) {
+    const rows = Array.isArray(data.cubicle_positions) ? data.cubicle_positions : [];
+    console.log(`[db-json] SELECT positions: found ${rows.length}`);
+    return { rows, rowCount: rows.length };
+  }
+
+  if (/^DELETE FROM cubicle_positions$/i.test(sql)) {
+    data.cubicle_positions = [];
+    saveJsonDb(data);
+    return { rows: [], rowCount: 1 };
+  }
+
+  if (/^INSERT INTO cubicle_positions/i.test(sql)) {
+    if (!data.cubicle_positions) data.cubicle_positions = [];
+    data.cubicle_positions.push({
+      cubicle_id: params[0],
+      x: params[1],
+      y: params[2],
+      type: params[3] || 'cubicle',
+      text: params[4] || null
+    });
+    saveJsonDb(data);
+    return { rows: [], rowCount: 1 };
+  }
+
+  if (/^UPDATE inventory SET cubicle_id = \$1 WHERE id = \$2$/i.test(sql)) {
+    const [cubicle_id, item_id] = params;
+    const item = data.inventory.find(inv => String(inv.id) === String(item_id));
+    if (item) {
+      item.cubicle_id = cubicle_id;
+      console.log(`[db-json] UPDATED item ${item_id} to cubicle ${cubicle_id}`);
+      saveJsonDb(data);
+      return { rows: [], rowCount: 1 };
+    }
+    console.warn(`[db-json] UPDATE FAILED: item ${item_id} not found`);
+    return { rows: [], rowCount: 0 };
   }
 
   throw new Error(`Unsupported JSON database query: ${sql}`);

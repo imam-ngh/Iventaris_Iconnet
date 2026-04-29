@@ -8,6 +8,53 @@ const https = require('https');
 const os = require('os');
 require('dotenv').config();
 
+// Database startup check
+async function initializeDatabase() {
+    console.log('[db] Checking database schema...');
+    try {
+        // Ensure cubicle_id column exists in inventory table
+        await db.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='inventory' AND column_name='cubicle_id') THEN
+                    ALTER TABLE inventory ADD COLUMN cubicle_id VARCHAR(50);
+                    RAISE NOTICE 'Added column cubicle_id to inventory table';
+                END IF;
+            END $$;
+        `);
+        
+        // Ensure cubicle_positions table exists and has correct columns
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS cubicle_positions (
+                cubicle_id VARCHAR(50) PRIMARY KEY,
+                x INTEGER NOT NULL,
+                y INTEGER NOT NULL,
+                type VARCHAR(20) DEFAULT 'cubicle',
+                text TEXT
+            );
+        `);
+
+        // Check if type column exists, if not add it
+        await db.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='cubicle_positions' AND column_name='type') THEN
+                    ALTER TABLE cubicle_positions ADD COLUMN type VARCHAR(20) DEFAULT 'cubicle';
+                    ALTER TABLE cubicle_positions ADD COLUMN text TEXT;
+                    RAISE NOTICE 'Added type and text columns to cubicle_positions table';
+                END IF;
+            END $$;
+        `);
+        
+        console.log('[db] Database schema is up to date.');
+    } catch (err) {
+        console.warn('[db] Database initialization check failed (this is normal in JSON mode):', err.message);
+    }
+}
+
+// Call initialization
+initializeDatabase();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -34,6 +81,7 @@ function mapInventory(row) {
         tanggalMasuk: row.tanggal_masuk ? row.tanggal_masuk.toISOString().split('T')[0] : null,
         date: row.date ? row.date.toISOString().split('T')[0] : null,
         qrCode: row.qr_code || '',
+        cubicle_id: row.cubicle_id || '',
         createdAt: row.created_at
     };
 }
@@ -391,21 +439,95 @@ app.post('/api/inventory/import', async (req, res) => {
 app.get('/api/stats', async (req, res) => {
     try {
         const totalResult = await db.query('SELECT COUNT(*) FROM inventory');
-        const monitorsResult = await db.query("SELECT COUNT(*) FROM inventory WHERE LOWER(name) = 'monitor'");
-        const keyboardsResult = await db.query("SELECT COUNT(*) FROM inventory WHERE LOWER(name) = 'keyboard'");
-        const miceResult = await db.query("SELECT COUNT(*) FROM inventory WHERE LOWER(name) = 'mouse'");
+        
+        const getCount = async (keyword) => {
+            const result = await db.query(`SELECT COUNT(*) FROM inventory WHERE LOWER(name) LIKE '%${keyword.toLowerCase()}%'`);
+            return parseInt(result.rows[0].count);
+        };
 
         const stats = {
             total: parseInt(totalResult.rows[0].count),
-            monitors: parseInt(monitorsResult.rows[0].count),
-            keyboards: parseInt(keyboardsResult.rows[0].count),
-            mice: parseInt(miceResult.rows[0].count)
+            monitors: await getCount('monitor'),
+            keyboards: await getCount('keyboard'),
+            mice: await getCount('mouse'),
+            headsets: await getCount('headset'),
+            laptops: await getCount('laptop'),
+            pcs: await getCount('pc'),
+            tvs: await getCount('tv')
         };
 
         res.json(stats);
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
+
+// ========================================
+// CUBICLE & MAPPING ENDPOINTS
+// ========================================
+
+// Get all cubicle positions
+app.get('/api/cubicle-positions', async (req, res) => {
+    try {
+        const result = await db.query('SELECT cubicle_id, x, y, type, text FROM cubicle_positions');
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
+
+// Save cubicle positions (bulk update)
+app.post('/api/cubicle-positions', async (req, res) => {
+    const { positions } = req.body;
+    if (!positions || !Array.isArray(positions)) {
+        return res.status(400).json({ success: false, message: 'Positions array is required' });
+    }
+
+    try {
+        // Clear existing positions first (simple approach for designer)
+        await db.query('DELETE FROM cubicle_positions');
+        
+        for (const pos of positions) {
+            await db.query(
+                'INSERT INTO cubicle_positions (cubicle_id, x, y, type, text) VALUES ($1, $2, $3, $4, $5)',
+                [pos.cubicle_id, pos.x, pos.y, pos.type || 'cubicle', pos.text || null]
+            );
+        }
+
+        res.json({ success: true, message: 'Mapping layout saved successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
+
+// Assign item to cubicle
+app.post('/api/inventory/assign-cubicle', async (req, res) => {
+    const { item_id, cubicle_id } = req.body;
+    console.log(`[api] Assigning item ${item_id} to cubicle ${cubicle_id}`);
+    
+    try {
+        // Update inventory table
+        const result = await db.query(
+            'UPDATE inventory SET cubicle_id = $1 WHERE id = $2',
+            [cubicle_id, item_id]
+        );
+
+        console.log(`[db] Update result: rowCount=${result.rowCount}`);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ success: false, message: 'Item not found' });
+        }
+
+        // Log history
+        await logHistory('UPDATE', { id: item_id }, `Assign item ke kubikel: ${cubicle_id || 'Unassigned'}`);
+
+        res.json({ success: true, message: `Item berhasil di-assign ke ${cubicle_id || 'Unassigned'}` });
+    } catch (err) {
+        console.error('[api] Error assigning cubicle:', err);
+        res.status(500).json({ success: false, message: 'Database error: ' + err.message });
     }
 });
 
