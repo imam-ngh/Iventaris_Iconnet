@@ -20,7 +20,6 @@ async function initializeDatabase() {
                     ALTER TABLE inventory ADD COLUMN cubicle_id VARCHAR(50);
                     RAISE NOTICE 'Added column cubicle_id to inventory table';
                 END IF;
-<<<<<<< HEAD
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='inventory' AND column_name='check_time') THEN
                     ALTER TABLE inventory ADD COLUMN check_time TIMESTAMP;
                     RAISE NOTICE 'Added column check_time to inventory table';
@@ -28,11 +27,6 @@ async function initializeDatabase() {
             END $$;
         `);
 
-=======
-            END $$;
-        `);
-        
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         // Ensure cubicle_positions table exists and has correct columns
         await db.query(`
             CREATE TABLE IF NOT EXISTS cubicle_positions (
@@ -55,11 +49,7 @@ async function initializeDatabase() {
                 END IF;
             END $$;
         `);
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         console.log('[db] Database schema is up to date.');
     } catch (err) {
         console.warn('[db] Database initialization check failed (this is normal in JSON mode):', err.message);
@@ -96,10 +86,7 @@ function mapInventory(row) {
         date: row.date ? row.date.toISOString().split('T')[0] : null,
         qrCode: row.qr_code || '',
         cubicle_id: row.cubicle_id || '',
-<<<<<<< HEAD
         checkTime: row.check_time || null,
-=======
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         createdAt: row.created_at
     };
 }
@@ -172,7 +159,6 @@ app.post('/api/inventory', async (req, res) => {
         }
 
         await db.query(
-<<<<<<< HEAD
             `INSERT INTO inventory (id, no, name, merk, sn, sn_converter, lokasi, kondisi_before, checklist, kondisi_after, catatan, tanggal_masuk, date, qr_code, created_at, cubicle_id, check_time)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
             [
@@ -180,14 +166,6 @@ app.post('/api/inventory', async (req, res) => {
                 newItem.kondisiBefore, newItem.checklist, newItem.kondisiAfter, newItem.catatan,
                 newItem.tanggalMasuk || newItem.date, newItem.date, newItem.qrCode, newItem.createdAt,
                 newItem.cubicle_id || '', null
-=======
-            `INSERT INTO inventory (id, no, name, merk, sn, sn_converter, lokasi, kondisi_before, checklist, kondisi_after, catatan, tanggal_masuk, date, qr_code, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-            [
-                newItem.id, newItem.no, newItem.name, newItem.merk, newItem.sn, newItem.snConverter || '', newItem.lokasi,
-                newItem.kondisiBefore, newItem.checklist, newItem.kondisiAfter, newItem.catatan,
-                newItem.tanggalMasuk || newItem.date, newItem.date, newItem.qrCode, newItem.createdAt
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
             ]
         );
 
@@ -231,7 +209,6 @@ app.put('/api/inventory/:id', async (req, res) => {
         await db.query(
             `UPDATE inventory SET
                 name = $1, merk = $2, sn = $3, sn_converter = $4, lokasi = $5, kondisi_before = $6,
-<<<<<<< HEAD
                 checklist = $7, kondisi_after = $8, catatan = $9, tanggal_masuk = $10, date = $11, 
                 qr_code = $12, check_time = $13
              WHERE id = $14`,
@@ -240,13 +217,6 @@ app.put('/api/inventory/:id', async (req, res) => {
                 updated.lokasi, updated.kondisi_before, updated.checklist, updated.kondisi_after, 
                 updated.catatan, updated.tanggal_masuk, updated.date, updated.qr_code, 
                 updateData.checkTime || currentItem.check_time,
-=======
-                checklist = $7, kondisi_after = $8, catatan = $9, tanggal_masuk = $10, date = $11, qr_code = $12
-             WHERE id = $13`,
-            [
-                updated.name, updated.merk, updated.sn, updated.sn_converter, updated.lokasi, updated.kondisi_before,
-                updated.checklist, updated.kondisi_after, updated.catatan, updated.tanggal_masuk, updated.date, updated.qr_code,
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
                 id
             ]
         );
@@ -312,7 +282,6 @@ app.post('/api/inventory/check', async (req, res) => {
         const isAlreadyChecked = (item.checklist || '').trim() === 'Ya';
 
         if (!isAlreadyChecked) {
-<<<<<<< HEAD
             // Update to 'Ya' and set check_time
             const now = new Date().toISOString();
             await db.query('UPDATE inventory SET checklist = $1, check_time = $2 WHERE id = $3', ['Ya', now, item.id]);
@@ -327,17 +296,6 @@ app.post('/api/inventory/check', async (req, res) => {
                 success: true,
                 status: 'found',
                 item: mapInventory(updatedItem)
-=======
-            // Update to 'Ya'
-            await db.query('UPDATE inventory SET checklist = $1 WHERE id = $2', ['Ya', item.id]);
-            // Log history
-            await logHistory('UPDATE', { id: item.id, name: item.name }, `Melakukan check inventaris: ${item.id}`);
-
-            return res.json({
-                success: true,
-                status: 'found',
-                item: mapInventory(item)
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
             });
         } else {
             return res.json({
@@ -355,11 +313,7 @@ app.post('/api/inventory/check', async (req, res) => {
 // Reset all checklist status
 app.post('/api/inventory/reset-checklist', async (req, res) => {
     try {
-<<<<<<< HEAD
         await db.query("UPDATE inventory SET checklist = 'Tidak', check_time = NULL");
-=======
-        await db.query("UPDATE inventory SET checklist = 'Tidak'");
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         await logHistory('UPDATE', { id: 'SYSTEM', name: 'ALL' }, 'Mereset semua status checklist inventaris');
         res.json({ success: true, message: 'Semua status checklist telah direset' });
     } catch (err) {
@@ -478,15 +432,9 @@ app.post('/api/inventory/import', async (req, res) => {
             console.log(`Importing: name=${name}, sn=${sn}, snConverter=${snConverter}, id=${id}`);
 
             await db.query(
-<<<<<<< HEAD
                 `INSERT INTO inventory (id, no, name, merk, sn, sn_converter, lokasi, kondisi_before, checklist, kondisi_after, catatan, tanggal_masuk, date, qr_code, created_at, cubicle_id, check_time)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
                 [id, no, name, merk, sn, snConverter, lokasi, kondisiBefore, checklist, kondisiAfter, catatan, tanggalMasuk, date, '', createdAt, '', null]
-=======
-                `INSERT INTO inventory (id, no, name, merk, sn, sn_converter, lokasi, kondisi_before, checklist, kondisi_after, catatan, tanggal_masuk, date, qr_code, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-                [id, no, name, merk, sn, snConverter, lokasi, kondisiBefore, checklist, kondisiAfter, catatan, tanggalMasuk, date, '', createdAt]
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
             );
 
             // Log history for each imported item
@@ -505,11 +453,7 @@ app.post('/api/inventory/import', async (req, res) => {
 app.get('/api/stats', async (req, res) => {
     try {
         const totalResult = await db.query('SELECT COUNT(*) FROM inventory');
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         const getCount = async (keyword) => {
             const result = await db.query(`SELECT COUNT(*) FROM inventory WHERE LOWER(name) LIKE '%${keyword.toLowerCase()}%'`);
             return parseInt(result.rows[0].count);
@@ -558,11 +502,7 @@ app.post('/api/cubicle-positions', async (req, res) => {
     try {
         // Clear existing positions first (simple approach for designer)
         await db.query('DELETE FROM cubicle_positions');
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         for (const pos of positions) {
             await db.query(
                 'INSERT INTO cubicle_positions (cubicle_id, x, y, type, text) VALUES ($1, $2, $3, $4, $5)',
@@ -581,11 +521,7 @@ app.post('/api/cubicle-positions', async (req, res) => {
 app.post('/api/inventory/assign-cubicle', async (req, res) => {
     const { item_id, cubicle_id } = req.body;
     console.log(`[api] Assigning item ${item_id} to cubicle ${cubicle_id}`);
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
     try {
         // Update inventory table
         const result = await db.query(
@@ -729,17 +665,10 @@ app.post('/api/history/bulk-delete', async (req, res) => {
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-<<<<<<< HEAD
 
         // Ensure signature column exists if table already existed
         await db.query(`ALTER TABLE handover ADD COLUMN IF NOT EXISTS signature TEXT;`);
 
-=======
-        
-        // Ensure signature column exists if table already existed
-        await db.query(`ALTER TABLE handover ADD COLUMN IF NOT EXISTS signature TEXT;`);
-        
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         console.log('Handover table ready');
     } catch (err) {
         console.error('Error creating handover table:', err);
@@ -760,11 +689,7 @@ app.get('/api/handover', async (req, res) => {
 // Add new handover record
 app.post('/api/handover', async (req, res) => {
     const { jenis, itemId, itemName, itemMerk, itemSn, pihakPenyerah, pihakPenerima, tanggalSerahTerima, kondisiBefore, kondisiAfter, lokasiBaru, catatan, noBeritaAcara, signature } = req.body;
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
     try {
         await db.query(
             `INSERT INTO handover (jenis, item_id, item_name, item_merk, item_sn, pihak_penyerah, pihak_penerima, tanggal_serah_terima, kondisi_before, kondisi_after, lokasi_baru, catatan, no_berita_acara, signature, timestamp)
@@ -814,20 +739,12 @@ if (fs.existsSync(sslPath.key) && fs.existsSync(sslPath.cert)) {
         key: fs.readFileSync(sslPath.key),
         cert: fs.readFileSync(sslPath.cert)
     };
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
     https.createServer(options, app).listen(PORT, '0.0.0.0', () => {
         console.log('\n=================================================');
         console.log('🚀 Inventory System is LIVE (SECURE HTTPS)!');
         console.log(`💻 Local:   https://localhost:${PORT}`);
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         const networkInterfaces = os.networkInterfaces();
         for (const interfaceName in networkInterfaces) {
             for (const iface of networkInterfaces[interfaceName]) {
@@ -844,11 +761,7 @@ if (fs.existsSync(sslPath.key) && fs.existsSync(sslPath.cert)) {
         console.log('🚀 Inventory System is LIVE (HTTP Mode)!');
         console.log('💡 Tip: Jalankan "node create-cert.js" untuk HTTPS');
         console.log(`💻 Local:   http://localhost:${PORT}`);
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         const networkInterfaces = os.networkInterfaces();
         for (const interfaceName in networkInterfaces) {
             for (const iface of networkInterfaces[interfaceName]) {
