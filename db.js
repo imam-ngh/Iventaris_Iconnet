@@ -42,7 +42,10 @@ function normalizeInventoryItem(item) {
     date: item.date || item.tanggalMasuk || null,
     qr_code: item.qr_code ?? item.qrCode ?? '',
     cubicle_id: item.cubicle_id ?? item.cubicleId ?? '',
+<<<<<<< HEAD
     check_time: item.check_time ?? item.checkTime ?? null,
+=======
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
     created_at: item.created_at ?? item.createdAt ?? new Date().toISOString()
   };
 }
@@ -140,7 +143,11 @@ function jsonQuery(text, params = []) {
   if (/^INSERT INTO inventory /i.test(sql)) {
     const [
       id, no, name, merk, sn, lokasi, kondisiBefore, checklist, kondisiAfter,
+<<<<<<< HEAD
       catatan, tanggalMasuk, date, qrCode, createdAt, checkTime
+=======
+      catatan, tanggalMasuk, date, qrCode, createdAt
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
     ] = params;
 
     const exists = data.inventory.some((item) => item.id === id);
@@ -164,7 +171,10 @@ function jsonQuery(text, params = []) {
         date,
         qrCode,
         cubicle_id: params[14] || '',
+<<<<<<< HEAD
         check_time: params[15] || null,
+=======
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         createdAt
       });
       saveJsonDb(data);
@@ -193,8 +203,12 @@ function jsonQuery(text, params = []) {
       tanggal_masuk: params[8],
       date: params[9],
       sn_converter: params[10],
+<<<<<<< HEAD
       qr_code: params[11],
       check_time: params[12]
+=======
+      qr_code: params[11]
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
     });
 
     saveJsonDb(data);

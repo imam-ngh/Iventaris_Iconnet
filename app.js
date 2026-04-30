@@ -167,7 +167,11 @@ function initGlobalEventListeners() {
     // Dashboard Map Delegation - NEVER REMOVED
     const dashboardMap = document.getElementById('dashboardMiniMap');
     if (dashboardMap) {
+<<<<<<< HEAD
         dashboardMap.onclick = function (e) {
+=======
+        dashboardMap.onclick = function(e) {
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
             const cubicle = e.target.closest('.cubicle-view');
             if (cubicle) {
                 const id = cubicle.getAttribute('data-id');
@@ -548,7 +552,11 @@ function renderDashboardMap() {
     cubiclePositions.forEach(pos => {
         // NEW: Handle Labels on Dashboard (More robust detection)
         const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         if (isLabel) {
             const div = document.createElement('div');
             div.className = 'view-label mini';
@@ -658,11 +666,19 @@ async function navigateTo(page) {
 
     const pageId = page + 'Page';
     const targetPage = document.getElementById(pageId);
+<<<<<<< HEAD
 
     if (targetPage) {
         console.log('[NAV] Target page found:', pageId);
         targetPage.classList.add('active');
 
+=======
+    
+    if (targetPage) {
+        console.log('[NAV] Target page found:', pageId);
+        targetPage.classList.add('active');
+        
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         // Add stagger animation to cards on dashboard
         if (page === 'dashboard') {
             const cards = targetPage.querySelectorAll('.stat-card');
@@ -2158,7 +2174,11 @@ async function performScan() {
             // Update local checkedItems for immediate UI updates
             checkedItems[item.id] = {
                 checked: true,
+<<<<<<< HEAD
                 checkTime: item.checkTime || new Date().toISOString()
+=======
+                checkTime: new Date().toISOString()
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
             };
 
             saveCheckedItems();
@@ -2204,7 +2224,11 @@ function showScanResultPopup(item, isDuplicate) {
         ? '<span class="status-badge-inline warning"><i class="fas fa-history"></i> Sudah Dicek</span>'
         : '<span class="status-badge-inline success"><i class="fas fa-check"></i> Pertama Kali</span>';
 
+<<<<<<< HEAD
     const checkTime = item.checkTime || new Date().toISOString();
+=======
+    const checkTime = isDuplicate ? (checkedItems[item.id] ? checkedItems[item.id].checkTime : null) : new Date().toISOString();
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 
     tableBody.innerHTML = `
         <tr>
@@ -2402,6 +2426,7 @@ function formatDateTime(dateStr) {
 }
 
 function loadCheckedItems() {
+<<<<<<< HEAD
     // RESET checkedItems and populate from current inventoryData
     // This ensures data is synchronized from the database
     checkedItems = {};
@@ -2419,6 +2444,16 @@ function loadCheckedItems() {
 function saveCheckedItems() {
     // No-op: Data is now stored in the database
     // We no longer use localStorage to ensure multi-device sync
+=======
+    const saved = localStorage.getItem('checkedItems');
+    if (saved) {
+        checkedItems = JSON.parse(saved);
+    }
+}
+
+function saveCheckedItems() {
+    localStorage.setItem('checkedItems', JSON.stringify(checkedItems));
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 }
 
 // Export checklist to Excel
@@ -4666,7 +4701,11 @@ function printProfessionalLabel(id) {
 
     // Create a new window for printing
     const printWindow = window.open('', '_blank', 'width=600,height=600');
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
     // Build the print document
     const html = `
         <!DOCTYPE html>
@@ -4821,7 +4860,11 @@ function renderNormalView() {
     poolContainer.innerHTML = unassigned.map(item => `
         <div class="pool-item" draggable="true" ondragstart="dragItemToMap(event, '${item.id}')">
             <h4>${item.name}</h4>
+<<<<<<< HEAD
             <p>${item.merk || '-'} | SN: ${item.sn || '-'}${item.snConverter ? ` | Conv: ${item.snConverter}` : ''}</p>
+=======
+            <p>${item.merk || '-'} | SN: ${item.sn || '-'}</p>
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
             <p style="font-size: 10px; opacity: 0.7; margin-top: 2px;"><i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}</p>
         </div>
     `).join('') || '<p class="text-center p-3 text-secondary">Tidak ada barang tersedia</p>';
@@ -4905,7 +4948,11 @@ function renderDesigner() {
     cubiclePositions.forEach(pos => {
         const div = document.createElement('div');
         const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         if (isLabel) {
             div.className = 'placed-label';
             div.setAttribute('data-id', pos.cubicle_id);
@@ -4927,7 +4974,11 @@ function renderDesigner() {
                 <button class="remove-placed-btn" onclick="removeFromCanvas(event, '${pos.cubicle_id}')">×</button>
             `;
         }
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         div.onmousedown = (e) => startMoveOnCanvas(e, pos.cubicle_id);
         canvas.appendChild(div);
     });
@@ -5062,7 +5113,11 @@ async function addSelectedToCanvas() {
     itemsToAdd.forEach(id => {
         const row = Math.floor(index / cols);
         const col = index % cols;
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
         cubiclePositions.push({
             cubicle_id: id,
             x: startX + (col * spacing),

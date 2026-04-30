@@ -22,7 +22,10 @@ Iconnet Inventory System adalah aplikasi berbasis web yang dirancang khusus untu
 - **Scan QR & Barcode**: Fitur integrasi kamera untuk pengecekan barang secara cepat.
 - **Automatic Code Generation**: Generate QR Code dan Barcode (CODE128) secara otomatis untuk setiap item.
 - **Cek Inventaris Massal**: Sistem checklist inventaris yang memudahkan audit aset berkala.
+<<<<<<< HEAD
 - **Multi-Device Sync**: Sinkronisasi status checklist secara real-time antar perangkat (PC & HP) melalui database terpusat.
+=======
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 
 ### 🗺️ Interactive Office Mapping
 - **Visual Map Designer**: Susun tata letak kubikel secara drag-and-drop pada kanvas digital yang interaktif.
@@ -43,7 +46,11 @@ Iconnet Inventory System adalah aplikasi berbasis web yang dirancang khusus untu
 | :--- | :--- |
 | **Frontend** | HTML5, Vanilla CSS3, JavaScript (ES6+) |
 | **Backend** | Node.js, Express.js |
+<<<<<<< HEAD
 | **Database** | PostgreSQL (Utama) & JSON File (Fallback) |
+=======
+| **Database** | PostgreSQL |
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 | **Analytics** | Chart.js |
 | **PDF Engine** | jsPDF, jsPDF-AutoTable |
 | **Excel Engine** | ExcelJS |
@@ -52,19 +59,34 @@ Iconnet Inventory System adalah aplikasi berbasis web yang dirancang khusus untu
 
 ---
 
+<<<<<<< HEAD
 ## ⚙️ Cara Instalasi & Deploy
 
 ### 1. Persiapan Local (Development)
+=======
+## ⚙️ Cara Instalasi
+
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 1. **Clone Repositori**
    ```bash
    git clone https://github.com/imam-ngh/Iventaris_Iconnet.git
    ```
+<<<<<<< HEAD
+=======
+
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 2. **Install Dependensi**
    ```bash
    npm install
    ```
+<<<<<<< HEAD
 3. **Konfigurasi Database**
    Buat file `.env` di direktori utama:
+=======
+
+3. **Konfigurasi Database**
+   Buat file `.env` di direktori utama dan sesuaikan dengan database PostgreSQL Anda:
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
    ```env
    DB_HOST=localhost
    DB_PORT=5432
@@ -73,10 +95,15 @@ Iconnet Inventory System adalah aplikasi berbasis web yang dirancang khusus untu
    DB_PASSWORD=your_password
    PORT=3000
    ```
+<<<<<<< HEAD
+=======
+
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 4. **Jalankan Aplikasi**
    ```bash
    npm start
    ```
+<<<<<<< HEAD
 
 ### 2. Cara Deploy ke Hosting/Cloud
 Untuk menjalankan aplikasi ini secara online 24/7, Anda bisa menggunakan layanan VPS atau Cloud:
@@ -101,6 +128,9 @@ git add .
 git commit -m "Update fitur sinkronisasi real-time"
 git push origin main
 ```
+=======
+   Akses melalui browser di: `http://localhost:3000`
+>>>>>>> 597348cd0fbff6b9a026297d3d6e16e1be04ca32
 
 ---
 
