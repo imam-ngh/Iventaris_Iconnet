@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iconnet - Kantor Inventory Manager</title>
+
+    <!-- Google Fonts - Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- QRCode.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <!-- html5-qrcode for camera scanning -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <!-- ExcelJS for Excel export with images -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+
+    <!-- SheetJS for Excel/CSV import -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
+    <!-- Chart.js for Dashboard Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Signature Pad for Digital Signatures -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js"></script>
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- PWA Support -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="img/logo1.png">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <!-- App Container -->
+    <div class="app-container active" id="appContainer">
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <img src="img/logo1.png" alt="Iconnet" class="logo-img">
+                </div>
+            </div>
+
+            <nav class="sidebar-menu">
+                <div class="menu-item active" data-page="dashboard">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Dashboard</span>
+                </div>
+                <div class="menu-item has-submenu" data-page="inventory">
+                    <i class="fas fa-list"></i>
+                    <span>Inventory</span>
+                    <i class="fas fa-chevron-down submenu-arrow"></i>
+                </div>
+                <div class="submenu">
+                    <div class="menu-item submenu-item" data-page="inventory">
+                        <i class="fas fa-list submenu-icon"></i>
+                        <span>Data Inventaris</span>
+                    </div>
+                    <div class="menu-item submenu-item" data-page="input">
+                        <i class="fas fa-plus submenu-icon"></i>
+                        <span>Tambah Inventaris</span>
+                    </div>
+                </div>
+                <div class="menu-item" data-page="scan">
+                    <i class="fas fa-qrcode"></i>
+                    <span>Cek Inventaris</span>
+                </div>
+                <div class="menu-item has-submenu" data-page="handover">
+                    <i class="fas fa-handshake"></i>
+                    <span>Serah Terima</span>
+                    <i class="fas fa-chevron-down submenu-arrow"></i>
+                </div>
+                <div class="submenu">
+                    <div class="menu-item submenu-item" data-page="handover-data">
+                        <i class="fas fa-table submenu-icon"></i>
+                        <span>Data Serah Terima</span>
+                    </div>
+                    <div class="menu-item submenu-item" data-page="handover-input">
+                        <i class="fas fa-plus-circle submenu-icon"></i>
+                        <span>Input Serah Terima</span>
+                    </div>
+                </div>
+                <div class="menu-item has-submenu" data-page="map">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <span>Denah Lokasi</span>
+                    <i class="fas fa-chevron-down submenu-arrow"></i>
+                </div>
+                <div class="submenu">
+                    <div class="menu-item submenu-item" data-page="map-designer">
+                        <i class="fas fa-drafting-compass submenu-icon"></i>
+                        <span>Mapping Lokasi</span>
+                    </div>
+                    <div class="menu-item submenu-item" data-page="map-view">
+                        <i class="fas fa-eye submenu-icon"></i>
+                        <span>Visualisasi Denah</span>
+                    </div>
+                </div>
+                <div class="menu-item" data-page="history">
+                    <i class="fas fa-history"></i>
+                    <span>History</span>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <button class="hamburger" id="hamburger">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 class="header-title" id="pageTitle">Dashboard</h1>
+                </div>
+                <div class="header-right" style="display: flex; align-items: center; gap: 15px;">
+                    <button id="themeToggle"
+                        style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-primary); transition: color 0.3s ease;">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="user-info">
+                        <div class="user-avatar" id="userAvatar">A</div>
+                        <span class="user-name" id="userName">Admin</span>
+                    </div>
+                    <button class="logout-btn" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Keluar
+                    </button>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div class="page-content">
+                <!-- Dashboard Page -->
+                <div class="page active" id="dashboardPage">
+                    <div class="dashboard-header">
+                        <div class="dashboard-greeting">
+                            <h1 class="gradient-text">Inventory Dashboard</h1>
+                            <p class="dashboard-subtitle">Selamat datang di panel manajemen inventaris</p>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card monitor premium-glow">
+                            <div class="icon"><i class="fas fa-desktop"></i></div>
+                            <div class="number gradient-text" id="totalMonitorsDashboard">0</div>
+                            <div class="label">Monitors</div>
+                        </div>
+                        <div class="stat-card keyboard premium-glow">
+                            <div class="icon"><i class="fas fa-keyboard"></i></div>
+                            <div class="number gradient-text" id="totalKeyboardsDashboard">0</div>
+                            <div class="label">Keyboards</div>
+                        </div>
+                        <div class="stat-card mouse premium-glow">
+                            <div class="icon"><i class="fas fa-mouse"></i></div>
+                            <div class="number gradient-text" id="totalMiceDashboard">0</div>
+                            <div class="label">Mouse</div>
+                        </div>
+                        <div class="stat-card headset premium-glow">
+                            <div class="icon"><i class="fas fa-headset"></i></div>
+                            <div class="number gradient-text" id="totalHeadsetsDashboard">0</div>
+                            <div class="label">Headsets</div>
+                        </div>
+                        <div class="stat-card laptop premium-glow">
+                            <div class="icon"><i class="fas fa-laptop"></i></div>
+                            <div class="number gradient-text" id="totalLaptopsDashboard">0</div>
+                            <div class="label">Laptops</div>
+                        </div>
+                        <div class="stat-card pc premium-glow">
+                            <div class="icon"><i class="fas fa-server"></i></div>
+                            <div class="number gradient-text" id="totalPCsDashboard">0</div>
+                            <div class="label">PC</div>
+                        </div>
+                        <div class="stat-card tv premium-glow">
+                            <div class="icon"><i class="fas fa-tv"></i></div>
+                            <div class="number gradient-text" id="totalTVsDashboard">0</div>
+                            <div class="label">TV</div>
+                        </div>
+                    </div>
+
+                    <!-- Total Stats (Hero Card) -->
+                    <div class="total-stats-container mt-4">
+                        <div class="stat-card total-hero premium-glow" onclick="navigateTo('inventory')"
+                            style="flex-direction: row; align-items: center; justify-content: space-between; padding: 30px; background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(30, 64, 175, 0.1) 100%); border: 1px solid var(--primary);">
+                            <div style="display: flex; align-items: center; gap: 20px;">
+                                <div class="icon" style="font-size: 40px; margin: 0; color: var(--primary);"><i
+                                        class="fas fa-boxes"></i></div>
+                                <div>
+                                    <h2 class="number gradient-text" id="totalItems"
+                                        style="font-size: 36px; margin: 0;">0</h2>
+                                    <p class="label" style="margin: 0; font-size: 16px; font-weight: 500;">Total
+                                        Inventaris Terdaftar</p>
+                                </div>
+                            </div>
+                            <div class="hero-badge">
+                                <i class="fas fa-sync-alt fa-spin-slow"></i> Real-time Monitoring
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DASHBOARD MAP SECTION -->
+                    <div class="dashboard-map-section mt-4" style="margin: 25px 0;">
+                        <div class="map-card premium-glow">
+                            <div class="map-card-header"
+                                style="padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                                <div class="header-left">
+                                    <h3
+                                        style="margin: 0; color: var(--primary); display: flex; align-items: center; gap: 10px;">
+                                        <i class="fas fa-map-marked-alt"></i> Denah Kantor Live
+                                    </h3>
+                                    <p style="margin: 5px 0 0 0; font-size: 12px; color: var(--text-secondary);">
+                                        Visualisasi penempatan inventaris real-time</p>
+                                </div>
+                                <div class="header-right"
+                                    style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+                                    <!-- Idea 3: Occupancy Widget -->
+                                    <div class="occupancy-widget"
+                                        style="display: flex; align-items: center; gap: 10px; background: var(--bg-secondary); padding: 5px 15px; border-radius: 30px; border: 1px solid var(--border);">
+                                        <div class="occupancy-info" style="font-size: 12px;">
+                                            <span style="color: var(--text-secondary);">Terisi:</span>
+                                            <strong id="occupiedPercent" style="color: var(--primary);">0%</strong>
+                                        </div>
+                                        <div class="mini-progress"
+                                            style="width: 60px; height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
+                                            <div id="occupancyBar"
+                                                style="width: 0%; height: 100%; background: var(--primary); transition: width 0.5s ease;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Idea 2: Smart Highlight Search -->
+                                    <div class="search-box" style="position: relative; width: 250px;">
+                                        <i class="fas fa-search"
+                                            style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 13px;"></i>
+                                        <input type="text" id="dashboardMapSearch"
+                                            placeholder="Cari SN / Nama Barang..." oninput="highlightDashboardMap()"
+                                            style="width: 100%; padding: 8px 15px 8px 35px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); font-size: 13px; color: var(--text-primary);">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="map-card-body"
+                                style="padding: 20px; background: rgba(255,255,255,0.02); min-height: 400px; position: relative;">
+                                <div id="dashboardMiniMap" class="office-map-view mini-view"
+                                    style="width: 100%; height: 500px; position: relative; overflow: auto; border: 1px dashed var(--border); border-radius: 12px; background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px;">
+                                    <!-- Content injected by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="analytics-section">
+                        <div class="chart-container premium-glow"
+                            style="background: var(--bg-card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px -1px var(--shadow-color);">
+                            <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: var(--text-primary);"><i
+                                    class="fas fa-chart-pie"></i> Distribusi Inventaris</h3>
+                            <div style="position: relative; height: 300px; display: flex; justify-content: center;">
+                                <canvas id="inventoryDistChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-container premium-glow"
+                            style="background: var(--bg-card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px -1px var(--shadow-color);">
+                            <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: var(--text-primary);"><i
+                                    class="fas fa-chart-bar"></i> Status Kondisi Barang</h3>
+                            <div style="position: relative; height: 300px; display: flex; justify-content: center;">
+                                <canvas id="conditionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recent-section">
+                        <h2 class="section-title">
+                            <i class="fas fa-history"></i>
+                            Aktivitas Terbaru
+                        </h2>
+                        <div class="table-container" style="overflow-x: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nama Barang</th>
+                                        <th>Merk</th>
+                                        <th>SN</th>
+                                        <th>Lokasi</th>
+                                        <th>Kondisi (Before)</th>
+                                        <th>Kondisi (After)</th>
+                                        <th>Checklist</th>
+                                        <th>Catatan</th>
+                                        <th>Tanggal</th>
+                                        <th>Barcode</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Inventory Page -->
+                <div class="page" id="inventoryPage">
+                    <div class="inventory-header">
+                        <div class="search-filter">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="searchInput" placeholder="Cari item...">
+                            </div>
+                            <select id="exportFilter" class="filter-select">
+                                <option value="all">Semua Data</option>
+                                <option value="Monitor">Monitor</option>
+                                <option value="Laptop">Laptop</option>
+                                <option value="Keyboard">Keyboard</option>
+                                <option value="Mouse">Mouse</option>
+                                <option value="Headset">Headset</option>
+                            </select>
+                            <select id="viewLimit" class="filter-select view-limit" onchange="changeViewLimit()">
+                                <option value="10">10 Data</option>
+                                <option value="50">50 Data</option>
+                                <option value="100">100 Data</option>
+                            </select>
+                        </div>
+                        <div class="export-buttons">
+                            <button class="export-btn delete-selected" id="deleteSelectedBtn" title="Hapus Terpilih"
+                                style="display: none; background: #dc3545;">
+                                <i class="fas fa-trash"></i>
+                                Hapus Terpilih (<span id="selectedCount">0</span>)
+                            </button>
+                            <button class="export-btn generate-qr" id="generateQrBtn"
+                                title="Generate QR untuk data terpilih"
+                                style="display: inline-flex; background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+                                <i class="fas fa-qrcode"></i>
+                                Generate QR
+                            </button>
+                            <button class="export-btn import" id="importExcelBtn" title="Import Excel/CSV">
+                                <i class="fas fa-file-import"></i>
+                                Import
+                            </button>
+                            <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                            <button class="export-btn excel" id="exportExcel">
+                                <i class="fas fa-file-excel"></i>
+                                Excel
+                            </button>
+                            <button class="export-btn pdf" id="exportPdf">
+                                <i class="fas fa-file-pdf"></i>
+                                PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-container" style="overflow-x: auto;">
+                        <table class="data-table" id="inventoryTable">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"></th>
+                                    <th class="sortable" data-sort="name">Nama Barang <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="merk">Merk <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="sn">SN <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="snConverter">SN Converter <i
+                                            class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="lokasi">Lokasi <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="kondisiBefore">Kondisi (Before) <i
+                                            class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="kondisiAfter">Kondisi (After) <i
+                                            class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="checklist">Checklist <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th class="sortable" data-sort="catatan">Catatan <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="tanggalMasuk">Tgl Barang Masuk <i
+                                            class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="date">Tgl Input <i class="fas fa-sort"></i></th>
+                                    <th>QR Code</th>
+                                    <th>Barcode</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTableBody">
+                            </tbody>
+                        </table>
+                        <div class="empty-state" id="emptyState" style="display: none;">
+                            <i class="fas fa-inbox"></i>
+                            <p>Belum ada data inventaris</p>
+                        </div>
+                    </div>
+                    <div class="pagination" id="inventoryPagination"
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: var(--bg-card); border-top: 1px solid var(--glass-border);">
+                        <div class="pagination-info">
+                            Menampilkan <span id="showingStart">0</span>-<span id="showingEnd">0</span> dari <span
+                                id="totalData">0</span> data
+                        </div>
+                        <div class="pagination-controls">
+                            <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </button>
+                            <span class="pagination-numbers" id="pageNumbers"></span>
+                            <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Inventory Page -->
+                <div class="page" id="inputPage">
+                    <div class="input-inventory-container">
+                        <div class="form-card">
+                            <h2><i class="fas fa-plus-circle"></i> Tambah Inventaris</h2>
+                            <form id="inventoryForm">
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Nama Barang</label>
+                                        <select id="itemName" required>
+                                            <option value="">Pilih Nama Barang</option>
+                                            <option value="Monitor">Monitor</option>
+                                            <option value="Laptop">Laptop</option>
+                                            <option value="Keyboard">Keyboard</option>
+                                            <option value="Mouse">Mouse</option>
+                                            <option value="Headset">Headset</option>
+                                            <option value="PC">PC</option>
+                                            <option value="TV">TV</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Merk</label>
+                                        <input type="text" id="itemMerk" placeholder="Contoh: Samsung, LG, Dell"
+                                            required>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>SN (Serial Number)</label>
+                                        <input type="text" id="itemSn" placeholder="Masukkan nomor seri" required>
+                                    </div>
+                                </div>
+                                <div class="form-row" id="snConverterRow" style="display: none;">
+                                    <div class="form-group-full">
+                                        <label>SN Converter</label>
+                                        <input type="text" id="itemSnConverter"
+                                            placeholder="Masukkan nomor seri converter (jika ada)">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Lokasi</label>
+                                        <input type="text" id="itemLocation" placeholder="Contoh: Ruang Meeting, Lobby"
+                                            required>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Kondisi (Before)</label>
+                                        <select id="itemKondisiBefore" required>
+                                            <option value="">Pilih Kondisi</option>
+                                            <option value="Baik">Baik</option>
+                                            <option value="Rusak Ringan">Rusak Ringan</option>
+                                            <option value="Rusak Berat">Rusak Berat</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Kondisi (After)</label>
+                                        <select id="itemKondisiAfter" required>
+                                            <option value="">Pilih Kondisi</option>
+                                            <option value="Baik">Baik</option>
+                                            <option value="Rusak Ringan">Rusak Ringan</option>
+                                            <option value="Rusak Berat">Rusak Berat</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Checklist</label>
+                                        <select id="itemChecklist" required>
+                                            <option value="Ya">Ya</option>
+                                            <option value="Tidak">Tidak</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Catatan</label>
+                                        <textarea id="itemCatatan" placeholder="Masukkan catatan (opsional)"></textarea>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Tanggal Barang Masuk</label>
+                                        <input type="date" id="itemTanggalMasuk" required>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group-full">
+                                        <label>Tanggal Input</label>
+                                        <input type="date" id="itemDate" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="submit-btn">
+                                    <i class="fas fa-save"></i>
+                                    Simpan & Generate QR
+                                </button>
+                            </form>
+                        </div>
+
+                        <div class="qr-display">
+                            <h2><i class="fas fa-qrcode"></i> QR Code</h2>
+                            <div class="qr-placeholder" id="qrPlaceholder">
+                                <i class="fas fa-qrcode"></i>
+                                <span>QR Code akan muncul di sini</span>
+                            </div>
+                            <div id="qrcode"></div>
+                            <div class="qr-info" id="qrInfo" style="display: none;">
+                                <h3 id="qrItemName">-</h3>
+                                <p id="qrItemId">ID: -</p>
+                            </div>
+                            <button class="print-qr-btn" id="printQrBtn">
+                                <i class="fas fa-print"></i>
+                                Cetak QR Code
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scan/Check Inventory Page -->
+                <div class="page cek-inventaris-page" id="scanPage">
+                    <div class="scan-container">
+                        <div class="scan-header">
+                            <h2><i class="fas fa-qrcode"></i> Cek Inventaris</h2>
+                            <p>Scan barcode atau QR code untuk menandai barang</p>
+                        </div>
+
+                        <div class="scan-input-section">
+                            <div class="scan-box">
+                                <i class="fas fa-barcode"></i>
+                                <input type="text" id="scanInput" placeholder="Scan atau ketik ID barcode..." autofocus>
+                                <button class="scan-btn" id="scanBtn" title="Cek">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                                <button class="camera-btn" id="cameraBtn" title="Kamera">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="scannerContainer" class="scanner-container" style="display: none;">
+                            <div id="reader"></div>
+                            <button class="close-scanner-btn" id="closeScannerBtn">
+                                <i class="fas fa-times"></i> Tutup Kamera
+                            </button>
+                        </div>
+
+                        <div class="scan-stats">
+                            <div class="scan-stat-card">
+                                <div class="stat-number" id="totalToCheck">0</div>
+                                <div class="stat-label">Total Barang</div>
+                            </div>
+                            <div class="scan-stat-card checked">
+                                <div class="stat-number" id="totalChecked">0</div>
+                                <div class="stat-label">Sudah Dicek</div>
+                            </div>
+                            <div class="scan-stat-card unchecked">
+                                <div class="stat-number" id="totalUnchecked">0</div>
+                                <div class="stat-label">Belum Dicek</div>
+                            </div>
+                        </div>
+
+                        <div class="scan-list">
+                            <div class="scan-list-header">
+                                <h3>Daftar Inventaris</h3>
+                                <div class="scan-actions">
+                                    <select id="scanFilter" class="filter-select" onchange="updateScanTable()">
+                                        <option value="all">Semua</option>
+                                        <option value="Monitor">Monitor</option>
+                                        <option value="Laptop">Laptop</option>
+                                        <option value="Keyboard">Keyboard</option>
+                                        <option value="Mouse">Mouse</option>
+                                        <option value="Headset">Headset</option>
+                                    </select>
+                                    <select id="scanViewLimit" class="filter-select view-limit"
+                                        onchange="updateScanTable()">
+                                        <option value="10">10 Data</option>
+                                        <option value="50">50 Data</option>
+                                        <option value="100">100 Data</option>
+                                    </select>
+                                    <button class="export-check-btn" id="exportCheckExcelBtn">
+                                        <i class="fas fa-file-excel"></i> Export Excel
+                                    </button>
+                                    <button class="export-check-btn pdf" id="exportCheckPdfBtn">
+                                        <i class="fas fa-file-pdf"></i> Export PDF
+                                    </button>
+                                    <button class="reset-btn" id="resetCheckBtn">
+                                        <i class="fas fa-redo"></i> Reset
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-container" style="overflow-x: auto;">
+                                <table class="data-table" id="scanTable">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="status">Status <i class="fas fa-sort"></i>
+                                            </th>
+                                            <th class="sortable" data-sort="id">ID <i class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="name">Nama Barang <i
+                                                    class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="merk">Merk <i class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="sn">SN <i class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="lokasi">Lokasi <i class="fas fa-sort"></i>
+                                            </th>
+                                            <th class="sortable" data-sort="checkTime">Waktu Cek <i
+                                                    class="fas fa-sort"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="scanTableBody">
+                                    </tbody>
+                                </table>
+                                <div class="pagination" id="scanPagination"
+                                    style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: var(--bg-card); border-top: 1px solid var(--glass-border);">
+                                    <div class="pagination-info">
+                                        Menampilkan <span id="scanShowingStart">0</span>-<span
+                                            id="scanShowingEnd">0</span> dari <span id="scanTotalData">0</span> data
+                                    </div>
+                                    <div class="pagination-controls">
+                                        <button class="pagination-btn" id="scanPrevBtn" onclick="changeScanPage(-1)">
+                                            <i class="fas fa-chevron-left"></i> Previous
+                                        </button>
+                                        <span class="pagination-numbers" id="scanPageNumbers"></span>
+                                        <button class="pagination-btn" id="scanNextBtn" onclick="changeScanPage(1)">
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History Page -->
+                <div class="page" id="historyPage">
+                    <div class="inventory-header">
+                        <div class="search-filter">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="historySearchInput" placeholder="Cari history...">
+                            </div>
+                            <select id="historyActionFilter" class="filter-select">
+                                <option value="all">Semua Aksi</option>
+                                <option value="CREATE">Input</option>
+                                <option value="UPDATE">Update</option>
+                                <option value="DELETE">Delete</option>
+                            </select>
+                            <select id="historyItemFilter" class="filter-select">
+                                <option value="all">Semua Barang</option>
+                                <option value="Monitor">Monitor</option>
+                                <option value="Laptop">Laptop</option>
+                                <option value="Keyboard">Keyboard</option>
+                                <option value="Mouse">Mouse</option>
+                                <option value="Headset">Headset</option>
+                            </select>
+                            <select id="historyViewLimit" class="filter-select view-limit"
+                                onchange="updateHistoryTable()">
+                                <option value="10">10 Data</option>
+                                <option value="50">50 Data</option>
+                                <option value="100">100 Data</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="table-container" style="overflow-x: auto;">
+                        <div class="export-buttons">
+                            <button class="export-btn delete-selected" id="deleteHistorySelectedBtn"
+                                title="Hapus Terpilih" style="display: none; background: #dc3545;">
+                                <i class="fas fa-trash"></i>
+                                Hapus Terpilih (<span id="historySelectedCount">0</span>)
+                            </button>
+                            <button class="export-btn excel" id="exportHistoryExcelBtn" title="Export Excel">
+                                <i class="fas fa-file-excel"></i>
+                                Excel
+                            </button>
+                            <button class="export-btn pdf" id="exportHistoryPdfBtn" title="Export PDF">
+                                <i class="fas fa-file-pdf"></i>
+                                PDF
+                            </button>
+                        </div>
+                        <table class="data-table" id="historyTable">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAllHistoryCheckbox"
+                                            onchange="toggleSelectAllHistory()"></th>
+                                    <th class="sortable" data-sort="action">Aksi <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="itemId">ID Item <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="itemName">Nama Barang <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th class="sortable" data-sort="itemMerk">Merk <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="itemSn">SN <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="itemLokasi">Lokasi <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="details">Detail <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-sort="timestamp">Waktu <i class="fas fa-sort"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                            </tbody>
+                        </table>
+                        <div class="empty-state" id="historyEmptyState" style="display: none;">
+                            <i class="fas fa-inbox"></i>
+                            <p>Belum ada history</p>
+                        </div>
+                        <div class="pagination" id="historyPagination"
+                            style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: var(--bg-card); border-top: 1px solid var(--glass-border);">
+                            <div class="pagination-info">
+                                Menampilkan <span id="historyShowingStart">0</span>-<span
+                                    id="historyShowingEnd">0</span> dari <span id="historyTotalData">0</span> data
+                            </div>
+                            <div class="pagination-controls">
+                                <button class="pagination-btn" id="historyPrevBtn" onclick="changeHistoryPage(-1)">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </button>
+                                <span class="pagination-numbers" id="historyPageNumbers"></span>
+                                <button class="pagination-btn" id="historyNextBtn" onclick="changeHistoryPage(1)">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAGE: MAPPING DESIGNER -->
+                <div class="page" id="map-designerPage">
+                    <div class="dashboard-header">
+                        <div class="dashboard-greeting">
+                            <h1 class="gradient-text">Mapping Lokasi (Designer)</h1>
+                            <p class="dashboard-subtitle">Susun tata letak kubikel kantor Anda di sini</p>
+                        </div>
+                    </div>
+
+                    <div class="map-designer-wrapper">
+                        <div class="designer-palette premium-glow">
+                            <div class="palette-header">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                    <h3 style="margin: 0;"><i class="fas fa-th"></i> Daftar Kubikel (A - F)</h3>
+                                    <button class="primary-btn btn-sm" id="bulkAddBtn" onclick="addSelectedToCanvas()"
+                                        style="display: none; padding: 5px 12px; font-size: 11px;">
+                                        <i class="fas fa-plus"></i> Tambah Terpilih (<span
+                                            id="selectedPaletteCount">0</span>)
+                                    </button>
+                                </div>
+                                <p>Klik untuk memilih, tarik ke kanvas, atau tambah bebarengan</p>
+                            </div>
+                            <div id="cubiclePalette" class="palette-list"></div>
+                        </div>
+
+                        <div class="designer-canvas-area">
+                            <div class="canvas-header">
+                                <h3><i class="fas fa-draw-polygon"></i> Kanvas Tata Letak</h3>
+                                <div class="canvas-actions">
+                                    <button class="export-btn btn-sm" onclick="addNewLabel()"
+                                        style="background: #10b981; margin-right: 10px;">
+                                        <i class="fas fa-font"></i> Tambah Label
+                                    </button>
+                                    <button class="export-btn btn-sm" onclick="saveMapLayout()">
+                                        <i class="fas fa-save"></i> Simpan Denah
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="designerCanvas" class="designer-canvas" ondragover="allowDrop(event)"
+                                ondrop="dropToCanvas(event)">
+                                <div class="canvas-grid-hint">Area Kanvas: Susun denah di sini</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAGE: VISUALISASI DENAH -->
+                <div class="page" id="map-viewPage">
+                    <div class="dashboard-header">
+                        <div class="dashboard-greeting">
+                            <h1 class="gradient-text">Visualisasi Denah Interaktif</h1>
+                            <p class="dashboard-subtitle">Klik kubikel untuk melihat atau memetakan inventaris</p>
+                        </div>
+                    </div>
+
+                    <div class="map-layout-wrapper">
+                        <!-- Sidebar: Unassigned Items Pool -->
+                        <div class="asset-pool-sidebar premium-glow">
+                            <div class="pool-header">
+                                <h3><i class="fas fa-boxes"></i> Barang Tersedia</h3>
+                                <div class="search-box mini">
+                                    <input type="text" id="poolSearchInput" placeholder="Cari barang..."
+                                        oninput="filterPoolItems()">
+                                </div>
+                            </div>
+                            <div id="unassignedPool" class="pool-items-list"></div>
+                        </div>
+
+                        <!-- Main: The Office Map (View Mode) -->
+                        <div class="map-canvas-area">
+                            <div id="officeMap" class="office-map-view"></div>
+                        </div>
+                    </div>
+
+                    <div class="map-legend">
+                        <div class="legend-item"><span class="dot occupied"></span> Terisi</div>
+                        <div class="legend-item"><span class="dot empty"></span> Kosong</div>
+                        <div class="legend-item"><i class="fas fa-info-circle"></i> Klik kubikel untuk detail barang
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Handover Data Page (Tabel) -->
+                <div class="page" id="handover-dataPage">
+                    <div class="scan-container" style="max-width: 1400px; margin: 0 auto;">
+                        <div class="scan-header" style="text-align: center; margin-bottom: 30px;">
+                            <h2><i class="fas fa-table"></i> Data Serah Terima</h2>
+                            <p>Kelola data penerimaan dan penyerahan barang inventaris</p>
+                        </div>
+                        <div class="inventory-header">
+                            <div class="search-filter">
+                                <div class="search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" id="handoverSearchInput" placeholder="Cari serah terima...">
+                                </div>
+                                <select id="handoverJenisFilter" class="filter-select">
+                                    <option value="all">Semua Jenis</option>
+                                    <option value="Penerimaan">Penerimaan</option>
+                                    <option value="Penyerahan">Penyerahan</option>
+                                </select>
+                                <select id="handoverViewLimit" class="filter-select view-limit"
+                                    onchange="updateHandoverTable()">
+                                    <option value="10">10 Data</option>
+                                    <option value="50">50 Data</option>
+                                    <option value="100">100 Data</option>
+                                </select>
+                            </div>
+                            <div class="export-buttons">
+                                <button class="export-btn delete-selected" id="deleteHandoverSelectedBtn"
+                                    title="Hapus Terpilih" style="display: none; background: #dc3545;"
+                                    onclick="deleteSelectedHandover();">
+                                    <i class="fas fa-trash"></i>
+                                    Hapus Terpilih (<span id="handoverSelectedCount">0</span>)
+                                </button>
+                                <button class="export-btn excel" id="exportHandoverExcel" title="Export Excel">
+                                    <i class="fas fa-file-excel"></i>
+                                    Excel
+                                </button>
+                                <button class="export-btn pdf" id="exportHandoverPdf" title="Export PDF">
+                                    <i class="fas fa-file-pdf"></i>
+                                    PDF
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-container" style="overflow-x: auto;">
+                            <table class="data-table" id="handoverTable">
+                                <thead>
+                                    <tr>
+                                        <th><input type="checkbox" id="selectAllHandoverCheckbox"
+                                                onchange="toggleSelectAllHandover()"></th>
+                                        <th class="sortable" data-key="jenis" onclick="sortHandoverTable('jenis')">Jenis
+                                            <i class="fas fa-sort"></i></th>
+                                        <th class="sortable" data-key="no_berita_acara"
+                                            onclick="sortHandoverTable('no_berita_acara')">No BA <i
+                                                class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-key="item_id" onclick="sortHandoverTable('item_id')">
+                                            ID
+                                            Item <i class="fas fa-sort"></i></th>
+                                        <th class="sortable" data-key="item_name"
+                                            onclick="sortHandoverTable('item_name')">
+                                            Nama Barang <i class="fas fa-sort"></i></th>
+                                        <th class="sortable" data-key="pihak_penyerah"
+                                            onclick="sortHandoverTable('pihak_penyerah')">Penyerah <i
+                                                class="fas fa-sort"></i></th>
+                                        <th class="sortable" data-key="pihak_penerima"
+                                            onclick="sortHandoverTable('pihak_penerima')">Penerima <i
+                                                class="fas fa-sort"></i></th>
+                                        <th class="sortable" data-key="tanggal_serah_terima"
+                                            onclick="sortHandoverTable('tanggal_serah_terima')">Tanggal <i
+                                                class="fas fa-sort"></i></th>
+                                        <th>Kondisi Before</th>
+                                        <th>Kondisi After</th>
+                                        <th>Lokasi Baru</th>
+                                        <th>Catatan</th>
+                                        <th class="sortable" data-key="timestamp"
+                                            onclick="sortHandoverTable('timestamp')">
+                                            Waktu <i class="fas fa-sort"></i></th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="handoverTableBody">
+                                </tbody>
+                            </table>
+                            <div class="empty-state" id="handoverEmptyState" style="display: none;">
+                                <i class="fas fa-inbox"></i>
+                                <p>Belum ada data serah terima</p>
+                            </div>
+                            <div class="pagination" id="handoverPagination"
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: var(--bg-card); border-top: 1px solid var(--glass-border);">
+                                <div class="pagination-info">
+                                    Menampilkan <span id="handoverShowingStart">0</span>-<span
+                                        id="handoverShowingEnd">0</span> dari <span id="handoverTotalData">0</span> data
+                                </div>
+                                <div class="pagination-controls">
+                                    <button class="pagination-btn" id="handoverPrevBtn"
+                                        onclick="changeHandoverPage(-1)">
+                                        <i class="fas fa-chevron-left"></i> Previous
+                                    </button>
+                                    <span class="pagination-numbers" id="handoverPageNumbers"></span>
+                                    <button class="pagination-btn" id="handoverNextBtn" onclick="changeHandoverPage(1)">
+                                        Next <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Handover Input Page (Form) -->
+                <div class="page" id="handover-inputPage">
+                    <div class="scan-container" style="max-width: 1200px; margin: 0 auto;">
+                        <div class="scan-header" style="text-align: center; margin-bottom: 30px;">
+                            <h2><i class="fas fa-plus-circle"></i> Input Serah Terima</h2>
+                            <p>Kelola penerimaan dan penyerahan barang inventaris</p>
+                        </div>
+                        <div class="input-inventory-container">
+                            <div class="form-card">
+                                <h3><i class="fas fa-plus-circle"></i> Form Serah Terima</h3>
+                                <form id="handoverForm">
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Jenis Transaksi</label>
+                                            <select id="handoverJenis" required onchange="toggleHandoverFields()">
+                                                <option value="">Pilih Jenis</option>
+                                                <option value="Penerimaan">Penerimaan (Baru)</option>
+                                                <option value="Penyerahan">Penyerahan</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>No Berita Acara</label>
+                                            <input type="text" id="handoverNoBA"
+                                                placeholder="Contoh: SMG08.006/ICONNET/BASTB/04-21-2026/0" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kategori Barang</label>
+                                            <select id="handoverKategori" required onchange="loadItemsByCategory()">
+                                                <option value="">Pilih Kategori</option>
+                                                <option value="Monitor">Monitor</option>
+                                                <option value="Laptop">Laptop</option>
+                                                <option value="Keyboard">Keyboard</option>
+                                                <option value="Mouse">Mouse</option>
+                                                <option value="Headset">Headset</option>
+                                                <option value="PC">PC</option>
+                                                <option value="TV">TV</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Pilih Item</label>
+                                            <select id="handoverItem" required onchange="loadHandoverItemDetails()"
+                                                disabled>
+                                                <option value="">Pilih Kategori Dulu</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Dari/Kepada Siapa</label>
+                                            <input type="text" id="handoverDari" placeholder="Nama pihak penyerah"
+                                                required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kepada Siapa</label>
+                                            <input type="text" id="handoverKepada" placeholder="Nama pihak penerima"
+                                                required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Tanggal Serah Terima</label>
+                                            <input type="date" id="handoverTanggal" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kondisi Saat Menyerah</label>
+                                            <select id="handoverKondisiBefore" required>
+                                                <option value="">Pilih Kondisi</option>
+                                                <option value="Baik">Baik</option>
+                                                <option value="Rusak Ringan">Rusak Ringan</option>
+                                                <option value="Rusak Berat">Rusak Berat</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kondisi Saat Diterima</label>
+                                            <select id="handoverKondisiAfter" required>
+                                                <option value="">Pilih Kondisi</option>
+                                                <option value="Baik">Baik</option>
+                                                <option value="Rusak Ringan">Rusak Ringan</option>
+                                                <option value="Rusak Berat">Rusak Berat</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Lokasi Baru (Opsional)</label>
+                                            <input type="text" id="handoverLokasi"
+                                                placeholder="Lokasi baru setelah serah terima">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Catatan</label>
+                                            <textarea id="handoverCatatan"
+                                                placeholder="Tambahkan catatan (opsional)"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label><i class="fas fa-pen-nib" style="color: var(--primary);"></i> Tanda
+                                                Tangan Pihak Penyerah</label>
+                                            <p
+                                                style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">
+                                                <i class="fas fa-info-circle"></i> Khusus tanda tangan dari pihak yang
+                                                <strong>menyerahkan barang</strong>.</p>
+                                            <div class="signature-wrapper">
+                                                <canvas id="signaturePad"></canvas>
+                                                <div class="signature-actions">
+                                                    <button type="button" id="clearSignature"><i
+                                                            class="fas fa-eraser"></i> Hapus</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="submit-btn">
+                                        <i class="fas fa-save"></i>
+                                        Simpan Serah Terima
+                                    </button>
+                                </form>
+                            </div>
+                            <div class="form-card detail-item-card">
+                                <h3><i class="fas fa-info-circle"></i> Detail Item Terpilih</h3>
+                                <div id="handoverItemDetails" class="detail-item-grid">
+                                    <div class="detail-item-box">
+                                        <div class="detail-item-label">ID</div>
+                                        <div class="detail-item-value" id="detailId">-</div>
+                                    </div>
+                                    <div class="detail-item-box">
+                                        <div class="detail-item-label">Nama</div>
+                                        <div class="detail-item-value" id="detailNama">-</div>
+                                    </div>
+                                    <div class="detail-item-box">
+                                        <div class="detail-item-label">Merk</div>
+                                        <div class="detail-item-value" id="detailMerk">-</div>
+                                    </div>
+                                    <div class="detail-item-box">
+                                        <div class="detail-item-label">SN</div>
+                                        <div class="detail-item-value" id="detailSn">-</div>
+                                    </div>
+                                    <div id="detailSnConverterContainer" class="detail-item-box" style="display: none;">
+                                        <div class="detail-item-label">SN Converter</div>
+                                        <div class="detail-item-value" id="detailSnConverter">-</div>
+                                    </div>
+                                    <div class="detail-item-box">
+                                        <div class="detail-item-label">Lokasi</div>
+                                        <div class="detail-item-value" id="detailLokasi">-</div>
+                                    </div>
+                                    <div class="detail-item-box">
+                                        <div class="detail-item-label">Kondisi</div>
+                                        <div class="detail-item-value status-baik" id="detailKondisi">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Handover/Serah Terima Page -->
+                <div class="page" id="handoverPage">
+                    <div class="scan-container" style="max-width: 1200px; margin: 0 auto;">
+                        <div class="scan-header" style="text-align: center; margin-bottom: 30px;">
+                            <h2><i class="fas fa-handshake"></i> Serah Terima Inventaris</h2>
+                            <p>Kelola penerimaan dan penyerahan barang inventaris</p>
+                        </div>
+
+                        <div class="input-inventory-container"
+                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                            <div class="form-card">
+                                <h3><i class="fas fa-plus-circle"></i> Form Serah Terima</h3>
+                                <form id="handoverForm">
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Jenis Transaksi</label>
+                                            <select id="handoverJenis" required onchange="toggleHandoverFields()">
+                                                <option value="">Pilih Jenis</option>
+                                                <option value="Penerimaan">Penerimaan (Baru)</option>
+                                                <option value="Penyerahan">Penyerahan</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kategori Barang</label>
+                                            <select id="handoverKategori" required onchange="loadItemsByCategory()">
+                                                <option value="">Pilih Kategori</option>
+                                                <option value="Monitor">Monitor</option>
+                                                <option value="Laptop">Laptop</option>
+                                                <option value="Keyboard">Keyboard</option>
+                                                <option value="Mouse">Mouse</option>
+                                                <option value="Headset">Headset</option>
+                                                <option value="PC">PC</option>
+                                                <option value="TV">TV</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Pilih Item</label>
+                                            <select id="handoverItem" required onchange="loadHandoverItemDetails()"
+                                                disabled>
+                                                <option value="">Pilih Kategori Dulu</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Dari/Kepada Siapa</label>
+                                            <input type="text" id="handoverDari" placeholder="Nama pihak penyerah"
+                                                required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kepada Siapa</label>
+                                            <input type="text" id="handoverKepada" placeholder="Nama pihak penerima"
+                                                required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Tanggal Serah Terima</label>
+                                            <input type="date" id="handoverTanggal" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kondisi Saat Menyerah</label>
+                                            <select id="handoverKondisiBefore" required>
+                                                <option value="">Pilih Kondisi</option>
+                                                <option value="Baik">Baik</option>
+                                                <option value="Rusak Ringan">Rusak Ringan</option>
+                                                <option value="Rusak Berat">Rusak Berat</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Kondisi Saat Diterima</label>
+                                            <select id="handoverKondisiAfter" required>
+                                                <option value="">Pilih Kondisi</option>
+                                                <option value="Baik">Baik</option>
+                                                <option value="Rusak Ringan">Rusak Ringan</option>
+                                                <option value="Rusak Berat">Rusak Berat</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Lokasi Baru (Opsional)</label>
+                                            <input type="text" id="handoverLokasi"
+                                                placeholder="Lokasi baru setelah serah terima">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label>Catatan</label>
+                                            <textarea id="handoverCatatan"
+                                                placeholder="Tambahkan catatan (opsional)"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group-full">
+                                            <label><i class="fas fa-pen-nib" style="color: var(--primary);"></i> Tanda
+                                                Tangan Pihak Penyerah</label>
+                                            <p
+                                                style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">
+                                                <i class="fas fa-info-circle"></i> Khusus tanda tangan dari pihak yang
+                                                <strong>menyerahkan barang</strong>.</p>
+                                            <div class="signature-wrapper">
+                                                <canvas id="signaturePad2"></canvas>
+                                                <div class="signature-actions">
+                                                    <button type="button" id="clearSignature2"><i
+                                                            class="fas fa-eraser"></i> Hapus</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="submit-btn">
+                                        <i class="fas fa-save"></i>
+                                        Simpan Serah Terima
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div class="form-card"
+                                style="background: linear-gradient(135deg, #f8fafc, #e2e8f0); padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                                <h3 style="font-size: 14px; margin-bottom: 12px; color: #1e293b;"><i
+                                        class="fas fa-info-circle"></i> Detail Item Terpilih</h3>
+                                <div id="handoverItemDetails"
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                                    <div
+                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                        <div style="color: #64748b; font-size: 10px;">ID</div>
+                                        <div style="color: #1e293b; font-weight: 600;" id="detailId">-</div>
+                                    </div>
+                                    <div
+                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                        <div style="color: #64748b; font-size: 10px;">Nama</div>
+                                        <div style="color: #1e293b; font-weight: 600;" id="detailNama">-</div>
+                                    </div>
+                                    <div
+                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                        <div style="color: #64748b; font-size: 10px;">Merk</div>
+                                        <div style="color: #1e293b; font-weight: 600;" id="detailMerk">-</div>
+                                    </div>
+                                    <div
+                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                        <div style="color: #64748b; font-size: 10px;">SN</div>
+                                        <div style="color: #1e293b; font-weight: 600;" id="detailSn">-</div>
+                                    </div>
+                                    <div
+                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                        <div style="color: #64748b; font-size: 10px;">Lokasi</div>
+                                        <div style="color: #1e293b; font-weight: 600;" id="detailLokasi">-</div>
+                                    </div>
+                                    <div
+                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                        <div style="color: #64748b; font-size: 10px;">Kondisi</div>
+                                        <div style="color: #10b981; font-weight: 600;" id="detailKondisi">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        </main>
+    </div>
+
+    <!-- View Modal -->
+    <div class="modal-overlay" id="viewModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Detail Item</h3>
+                <button class="modal-close" onclick="closeModal('viewModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-qr-display">
+                    <div id="modal-qrcode"></div>
+                </div>
+                <div class="item-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Nama Barang</span>
+                        <span class="detail-value" id="viewItemName">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Merk</span>
+                        <span class="detail-value" id="viewMerk">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">SN</span>
+                        <span class="detail-value" id="viewSn">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">SN Converter</span>
+                        <span class="detail-value" id="viewSnConverter">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Lokasi</span>
+                        <span class="detail-value" id="viewLocation">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Kondisi (Before)</span>
+                        <span class="detail-value" id="viewKondisiBefore">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Kondisi (After)</span>
+                        <span class="detail-value" id="viewKondisiAfter">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Checklist</span>
+                        <span class="detail-value" id="viewChecklist">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Catatan</span>
+                        <span class="detail-value" id="viewCatatan">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Tanggal</span>
+                        <span class="detail-value" id="viewItemDate">-</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn print" onclick="printBarcode()">Print Barcode</button>
+                <button class="modal-btn cancel" onclick="closeModal('viewModal')">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Edit Item</h3>
+                <button class="modal-close" onclick="closeModal('editModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form class="edit-form" id="editForm">
+                    <input type="hidden" id="editItemId">
+                    <div class="form-group">
+                        <label>Nama Barang</label>
+                        <select id="editItemName" required>
+                            <option value="">Pilih Nama Barang</option>
+                            <option value="Monitor">Monitor</option>
+                            <option value="Laptop">Laptop</option>
+                            <option value="Keyboard">Keyboard</option>
+                            <option value="Mouse">Mouse</option>
+                            <option value="Headset">Headset</option>
+                            <option value="PC">PC</option>
+                            <option value="TV">TV</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Merk</label>
+                        <input type="text" id="editMerk" required>
+                    </div>
+                    <div class="form-group">
+                        <label>SN</label>
+                        <input type="text" id="editSn" required>
+                    </div>
+                    <div class="form-group" id="editSnConverterRow" style="display: none;">
+                        <label>SN Converter</label>
+                        <input type="text" id="editSnConverter" placeholder="Masukkan nomor seri converter (jika ada)">
+                    </div>
+                    <div class="form-group">
+                        <label>Lokasi</label>
+                        <input type="text" id="editLocation" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Kondisi (Before)</label>
+                        <select id="editKondisiBefore" required>
+                            <option value="Baik">Baik</option>
+                            <option value="Rusak Ringan">Rusak Ringan</option>
+                            <option value="Rusak Berat">Rusak Berat</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Kondisi (After)</label>
+                        <select id="editKondisiAfter" required>
+                            <option value="Baik">Baik</option>
+                            <option value="Rusak Ringan">Rusak Ringan</option>
+                            <option value="Rusak Berat">Rusak Berat</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Checklist</label>
+                        <select id="editChecklist" required>
+                            <option value="Ya">Ya</option>
+                            <option value="Tidak">Tidak</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Catatan</label>
+                        <textarea id="editCatatan"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tanggal Barang Masuk</label>
+                        <input type="date" id="editTanggalMasuk" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Tanggal Input</label>
+                        <input type="date" id="editItemDate" required>
+                    </div>
+                    <div class="form-actions"
+                        style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                        <button type="button" class="modal-btn cancel" onclick="closeModal('editModal')">Batal</button>
+                        <button type="button" class="modal-btn save" onclick="saveEdit()">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Hapus Item</h3>
+                <button class="modal-close" onclick="closeModal('deleteModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Apakah Anda yakin ingin menghapus item "<span id="deleteItemName"></span>"?</p>
+                <p style="color: var(--accent); margin-top: 8px;">Tindakan ini tidak dapat dibatalkan.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" onclick="closeModal('deleteModal')">Batal</button>
+                <button class="modal-btn delete" onclick="confirmDelete()">Hapus</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Result Modal -->
+    <div class="modal-overlay" id="scanResultModal">
+        <div class="modal scan-result-modal">
+            <div class="modal-header" id="scanResultHeader">
+                <h3 id="scanResultTitle">
+                    <i class="fas fa-qrcode"></i> Hasil Scan
+                </h3>
+                <button class="modal-close-btn" onclick="closeModal('scanResultModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="scanResultStatus" class="scan-result-banner"></div>
+
+                <div class="scan-detail-card">
+                    <div class="scan-detail-header">
+                        <i class="fas fa-info-circle"></i> Informasi Detail Barang
+                    </div>
+                    <div class="scan-table-wrapper" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                        <table class="scan-result-table">
+                            <tbody id="scanResultTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn primary" onclick="closeModal('scanResultModal')">
+                    <i class="fas fa-check"></i> Selesai
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i>
+        <span id="toastMessage">Berhasil!</span>
+    </div>
+
+    <!-- Cubicle Assignment Modal -->
+    <div class="modal-overlay" id="assignCubicleModal">
+        <div class="modal-content premium-glow" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2><i class="fas fa-th"></i> Assign Item ke <span id="targetCubicleId"></span></h2>
+                <button class="modal-close" onclick="closeModal('assignCubicleModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-box mb-3">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="unassignedSearchInput" placeholder="Cari item yang belum di-assign..."
+                        oninput="filterUnassignedItems()">
+                </div>
+                <div id="unassignedItemsList" class="unassigned-items-list">
+                    <!-- Items will be listed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cubicle Detail Modal -->
+    <div id="cubicleDetailModal" class="modal-overlay">
+        <div class="modal-content premium-glow"
+            style="max-width: 550px; padding: 0; overflow: hidden; border: none; background: var(--bg-card);">
+            <div class="modal-header"
+                style="padding: 25px; background: linear-gradient(135deg, var(--primary) 0%, #1e40af 100%); color: white; display: flex; justify-content: space-between; align-items: center; border: none;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div
+                        style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                        <i class="fas fa-id-badge"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: white;">Kubikel <span
+                                id="detailCubicleId"></span></h2>
+                        <p style="margin: 0; font-size: 12px; opacity: 0.8;">Detail inventaris terdaftar pada lokasi ini
+                        </p>
+                    </div>
+                </div>
+                <button class="close-modal-premium" onclick="closeModal('cubicleDetailModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px; max-height: 60vh; overflow-y: auto;">
+                <div id="cubicleItemsList" class="cubicle-items-list-detailed">
+                    <!-- Items will be listed here -->
+                </div>
+            </div>
+            <div class="modal-footer"
+                style="padding: 20px; border-top: 1px solid var(--border); background: var(--bg-secondary); display: flex; gap: 15px;">
+                <button class="primary-btn" onclick="openAssignFromDetail()"
+                    style="flex: 2; padding: 12px; border-radius: 10px; font-weight: 600;">
+                    <i class="fas fa-plus-circle"></i> Tambah / Assign Barang
+                </button>
+                <button class="secondary-btn" onclick="closeModal('cubicleDetailModal')"
+                    style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 500;">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Label Print Container -->
+    <div id="labelPrintContainer"></div>
+
+    <!-- Custom JavaScript -->
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Service Worker registered'))
+                    .catch(err => console.log('Service Worker registration failed', err));
+            });
+        }
+    </script>
+</body>
+
+</html>

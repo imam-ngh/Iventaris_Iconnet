@@ -1,0 +1,6 @@
+﻿            ['Serial Number (SN)', data.item_sn || '-'],
+
+            ['Kategori / Jenis', data.jenis || '-'],
+
+            ['Kondisi Awal (Penyerah)', data.kondisi_before || '-'],
+
