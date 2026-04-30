@@ -5171,8 +5171,9 @@ async function handleCubicleClick(cubicleId) {
                     <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">
                         <span style="color: var(--primary); font-weight: 600;">${item.id}</span> | ${item.merk || '-'}
                     </div>
-                    <div style="font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: 10px;">
+                    <div style="font-size: 11px; color: var(--text-tertiary); display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
                         <span><i class="fas fa-barcode"></i> SN: ${item.sn || '-'}</span>
+                        ${item.name.toLowerCase().includes('headset') && (item.snConverter || item.sn_converter) ? `<span><i class="fas fa-link"></i> Conv: ${item.snConverter || item.sn_converter}</span>` : ''}
                         <span><i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}</span>
                     </div>
                 </div>
